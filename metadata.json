@@ -1,0 +1,6 @@
+{
+  "name": "Controle de Entregas",
+  "description": "Aplicativo de alta performance para gerenciar entregas e o status de 15 entregadores em tempo real.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
