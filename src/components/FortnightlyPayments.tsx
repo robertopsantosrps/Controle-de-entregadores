@@ -260,6 +260,12 @@ export default function FortnightlyPayments({
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Track excluded/deleted card IDs across sessions
+  const [deletedCouriers, setDeletedCouriers] = useState<string[]>(() => {
+    const saved = localStorage.getItem('jadlog_deleted_couriers');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Merged standard and dynamically added couriers
   const allCouriers = useMemo(() => {
     const standard = drivers.map(d => {
@@ -284,8 +290,8 @@ export default function FortnightlyPayments({
         isCustom: true,
       };
     });
-    return [...standard, ...custom];
-  }, [drivers, customCouriers, driverMappings]);
+    return [...standard, ...custom].filter(c => !deletedCouriers.includes(c.id));
+  }, [drivers, customCouriers, driverMappings, deletedCouriers]);
 
   // Modals / Overlays for editing and creating cards
   const [editingCourierId, setEditingCourierId] = useState<string | null>(null);
@@ -310,6 +316,9 @@ export default function FortnightlyPayments({
   // Print helper states
   const [showPrintInstructions, setShowPrintInstructions] = useState(false);
   const [isInIframe, setIsInIframe] = useState(false);
+
+  // Delete confirmation states
+  const [courierToDelete, setCourierToDelete] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     try {
@@ -632,10 +641,13 @@ export default function FortnightlyPayments({
     setEditingCourierId(null);
   };
 
-  const handleDeleteCourier = (driverId: string) => {
-    if (!window.confirm('Tem certeza que deseja apagar permanentemente este card de entregador?')) return;
-    
-    // Remove from customCouriers list
+  const confirmDeleteCourier = (driverId: string) => {
+    // Add to deleted list to prevent showing up
+    const updatedDeleted = [...deletedCouriers, driverId];
+    setDeletedCouriers(updatedDeleted);
+    localStorage.setItem('jadlog_deleted_couriers', JSON.stringify(updatedDeleted));
+
+    // Remove from customCouriers list if they are in there
     const updatedCustom = customCouriers.filter(c => c.id !== driverId);
     setCustomCouriers(updatedCustom);
     localStorage.setItem('jadlog_custom_couriers', JSON.stringify(updatedCustom));
@@ -657,6 +669,13 @@ export default function FortnightlyPayments({
     localStorage.setItem('jadlog_fortnightly_ledger', JSON.stringify(newLedger));
 
     setEditingCourierId(null);
+    setCourierToDelete(null);
+  };
+
+  const handleDeleteCourier = (driverId: string) => {
+    const courier = allCouriers.find(c => c.id === driverId);
+    const name = courier ? courier.name : 'Entregador';
+    setCourierToDelete({ id: driverId, name });
   };
 
   const handleCreateCourier = () => {
@@ -1147,23 +1166,6 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
               <Plus className="w-3.5 h-3.5" />
               Cadastrar Novo Card / Rota
             </button>
-
-            <button
-              onClick={handleWipeAllLedgerAndReset}
-              className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
-              title="Apagar todos os dados salvos em todas as quinzenas e reiniciar limpo"
-            >
-              <RefreshCw className="w-3.5 h-3.5 animate-spin-reverse" />
-              Reset Geral (Começar do Zero)
-            </button>
-
-            <button
-              onClick={handleClearQuantities}
-              className="px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Zerar Período Atual
-            </button>
           </div>
         </div>
       </div>
@@ -1231,6 +1233,14 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
               >
                 {/* Visual Header inspired by Jadlog card */}
                 <div className="bg-[#10b981] text-white p-3.5 text-center flex flex-col justify-center items-center relative">
+                  <button
+                    onClick={() => handleDeleteCourier(report.driverId)}
+                    className="absolute top-2.5 right-9 p-1 text-emerald-100 hover:text-rose-200 hover:bg-rose-700/60 rounded-lg transition-colors cursor-pointer print:hidden"
+                    title="Excluir este card permanentemente"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+
                   <button
                     onClick={() => {
                       setEditingCourierId(report.driverId);
@@ -2193,7 +2203,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
             {/* Footer */}
             <div className="bg-slate-50 p-5 border-t border-slate-100 flex justify-between items-center">
               <div>
-                {editingCourierId.startsWith('custom-drv-') && (
+                {editingCourierId && (
                   <button
                     onClick={() => handleDeleteCourier(editingCourierId)}
                     className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 rounded-xl font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
@@ -2895,6 +2905,52 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 Abrir em Nova Aba
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOM CONFIRMATION DIALOG FOR CARD EXCLUSION */}
+      {courierToDelete && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs print:hidden animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl max-w-sm w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="bg-[#e31a1a] text-white p-5 flex items-center gap-3 shrink-0">
+              <div className="p-2 bg-white/10 rounded-xl">
+                <Trash2 className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black tracking-tight font-sans">Excluir Card do Entregador?</h3>
+                <p className="text-[10px] text-rose-100 mt-0.5 font-sans font-medium">Esta ação não pode ser desfeita</p>
+              </div>
+            </div>
+
+            {/* Content body */}
+            <div className="p-6 space-y-3 font-sans text-slate-700 text-xs">
+              <p className="font-semibold text-slate-800 leading-relaxed text-[13px]">
+                Você tem certeza que deseja excluir o card de <strong className="text-slate-900 font-extrabold font-mono bg-slate-100 px-1.5 py-0.5 rounded">{courierToDelete.name}</strong>?
+              </p>
+              
+              <div className="bg-rose-50 border border-rose-150 rounded-2xl p-3 text-rose-950 text-[11px] leading-relaxed">
+                <span className="font-bold block mb-0.5">⚠️ O que acontecerá:</span>
+                Todos os dados e lançamentos deste entregador na quinzena atual e quinzenas passadas serão ocultados e removidos permanentemente das visualizações.
+              </div>
+            </div>
+
+            {/* Footer with action */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2 shrink-0 justify-end">
+              <button
+                onClick={() => setCourierToDelete(null)}
+                className="px-4 py-2 border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs cursor-pointer shadow-xs transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => confirmDeleteCourier(courierToDelete.id)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-black text-xs cursor-pointer flex items-center gap-1 shadow-md active:scale-97 transition-all"
+              >
+                Sim, Excluir Card
               </button>
             </div>
           </div>
