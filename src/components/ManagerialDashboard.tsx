@@ -397,11 +397,17 @@ export default function ManagerialDashboard({
       const debits = (rec.debitAdvance || 0) + (rec.debitFuel || 0) + (rec.debitLoss || 0);
       const totalDeliveries = rec.standardCount + (isCopav(route) ? 0 : rec.nonStandardCount);
 
-      // Balanced performance Score: Deliveries successfully completed weight, penalizing occurrences and pendings severely
-      const totalEvents = rec.standardCount + rec.nonStandardCount + rec.occurrencesCount;
-      const efficiency = totalEvents > 0 
-        ? Math.max(0, Math.min(100, Math.round(((rec.standardCount + rec.nonStandardCount) / (totalEvents + rec.pendingCount * 2)) * 100)))
-        : 100;
+      // Balanced performance Score (SLA): Calculated proportionally.
+      // - Each manual Occurrence counts as -5% SLA
+      // - Each Pending counts as -2% SLA
+      // - Each R$ of Multa/Extravio (debitLoss) counts as -0.20% SLA (e.g. R$100 multa = -20% SLA)
+      let efficiency = 100;
+      if (rec.standardCount > 0 || rec.nonStandardCount > 0 || rec.occurrencesCount > 0 || rec.pendingCount > 0 || (rec.debitLoss || 0) > 0) {
+        const occurrencesPenalty = rec.occurrencesCount * 5;
+        const pendingPenalty = rec.pendingCount * 2;
+        const finesPenalty = (rec.debitLoss || 0) * 0.20;
+        efficiency = Math.max(0, Math.min(100, Math.round(100 - (occurrencesPenalty + pendingPenalty + finesPenalty))));
+      }
 
       return {
         driverId: rec.driverId,
@@ -730,7 +736,7 @@ export default function ManagerialDashboard({
               <h4 className="text-sm font-bold text-slate-850 mt-0.5">
                 Ranking de Melhores do Período
               </h4>
-              <p className="text-[11px] text-slate-400">Classificados por taxa de eficiência (Entregues / [Acumulado + Ocorrências + Pendentes])</p>
+              <p className="text-[11px] text-slate-400">Classificados por SLA Proporcional (Penas: Ocorrência -5%, Pendência -2%, Multa -0,20% por R$)</p>
             </div>
             <Award className="w-6 h-6 text-orange-500 shrink-0" />
           </div>

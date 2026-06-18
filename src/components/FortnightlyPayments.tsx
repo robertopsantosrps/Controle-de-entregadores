@@ -304,8 +304,20 @@ export default function FortnightlyPayments({
   const [createFormPhone, setCreateFormPhone] = useState('');
   const [createFormPix, setCreateFormPix] = useState('');
 
-  // activeView options: 'cards' (exact Jadlog look) or 'spreadsheet' (reports table closure)
-  const [activeSubView, setActiveSubView] = useState<'cards' | 'spreadsheet'>('cards');
+  // activeView options: 'cards' (exact Jadlog look), 'spreadsheet' (reports table closure) or 'finance_report' (basic finance compilation)
+  const [activeSubView, setActiveSubView] = useState<'cards' | 'spreadsheet' | 'finance_report'>('cards');
+
+  // Print helper states
+  const [showPrintInstructions, setShowPrintInstructions] = useState(false);
+  const [isInIframe, setIsInIframe] = useState(false);
+
+  useEffect(() => {
+    try {
+      setIsInIframe(window.self !== window.top);
+    } catch (e) {
+      setIsInIframe(true);
+    }
+  }, []);
 
   // WhatsApp image sharing states
   const [cardImageSrc, setCardImageSrc] = useState<string | null>(null);
@@ -997,7 +1009,11 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
 
   // Print helper window
   const triggerPrintClose = () => {
-    window.print();
+    if (isInIframe) {
+      setShowPrintInstructions(true);
+    } else {
+      window.print();
+    }
   };
 
   return (
@@ -1042,6 +1058,16 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
             }`}
           >
             Relatório / Planilha Fechamento
+          </button>
+          <button
+            onClick={() => setActiveSubView('finance_report')}
+            className={`text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer ${
+              activeSubView === 'finance_report'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-rose-100 hover:bg-white/10'
+            }`}
+          >
+            Resumo Financeiro (PIX)
           </button>
         </div>
       </div>
@@ -1353,6 +1379,60 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                   </div>
                 </div>
 
+                {/* Performance & Occurrences Section (SLA) */}
+                <div className="p-3.5 border-b border-sky-100 bg-sky-50/25 space-y-2">
+                  <div className="flex items-center justify-between text-[10px] uppercase font-black text-sky-700 tracking-wider">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-sky-600 inline-block animate-pulse shrink-0"></span>
+                      <span>Ocorrência, Pendência e SLA</span>
+                    </div>
+                    {/* Real-time SLA badge inside the card */}
+                    <span className={`px-1.5 py-0.2 rounded font-mono font-black text-[9px] ${
+                      Math.max(0, Math.min(100, Math.round(100 - ((report.occurrencesCount * 5) + (report.pendingCount * 2) + ((report.debitLoss || 0) * 0.2) * 1)))) >= 95
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : Math.max(0, Math.min(100, Math.round(100 - ((report.occurrencesCount * 5) + (report.pendingCount * 2) + ((report.debitLoss || 0) * 0.2) * 1)))) >= 85
+                          ? 'bg-orange-100 text-orange-850'
+                          : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      SLA: {Math.max(0, Math.min(100, Math.round(100 - ((report.occurrencesCount * 5) + (report.pendingCount * 2) + ((report.debitLoss || 0) * 0.2) * 1))))}%
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {/* Ocorrências */}
+                    <div className="bg-white border border-sky-150 rounded-xl p-1.5 flex flex-col justify-between min-h-[58px]">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight block text-center" title="Lançamento manual de ocorrências ocorridas no período">Ocorrências</span>
+                      <div className="mt-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 px-1 py-0.5">
+                        <input
+                          type="number"
+                          min="0"
+                          value={report.occurrencesCount}
+                          onChange={(e) => {
+                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                            updateSingleRecord(report.driverId, { occurrencesCount: val });
+                          }}
+                          className="w-full text-xs font-black text-center font-mono bg-transparent focus:outline-none text-sky-700"
+                        />
+                      </div>
+                    </div>
+                    {/* Pendências */}
+                    <div className="bg-white border border-sky-150 rounded-xl p-1.5 flex flex-col justify-between min-h-[58px]">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight block text-center" title="Lançamento manual de pendências ocorridas no período">Pendências</span>
+                      <div className="mt-1 flex items-center bg-slate-50 rounded-lg border border-slate-200 px-1 py-0.5">
+                        <input
+                          type="number"
+                          min="0"
+                          value={report.pendingCount}
+                          onChange={(e) => {
+                            const val = Math.max(0, parseInt(e.target.value) || 0);
+                            updateSingleRecord(report.driverId, { pendingCount: val });
+                          }}
+                          className="w-full text-xs font-black text-center font-mono bg-transparent focus:outline-none text-sky-700"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Sub-card detail band: pricing computation and markings */}
                 <div className="p-3.5 bg-slate-55 border-b border-slate-100 flex flex-col gap-1.5 text-xs text-slate-600">
                   <div className="flex justify-between items-center text-[11px]">
@@ -1440,18 +1520,65 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
 
       {/* ACTIVE SUBVIEW 2: SPREADSHEET / FECHAMENTO VIEW (Print friendly list) */}
       {activeSubView === 'spreadsheet' && (
-        <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+        <div id="spreadsheet-print-container" className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+          {/* Custom landscape print CSS rule injected directly. Bulletproof for any container environment */}
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              /* Hide every element on the website */
+              body * {
+                visibility: hidden !important;
+              }
+              /* Show ONLY our printed spreadsheet and its elements */
+              #spreadsheet-print-container, #spreadsheet-print-container * {
+                visibility: visible !important;
+                color: #000000 !important;
+              }
+              #spreadsheet-print-container {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 10px !important;
+                border: none !important;
+                box-shadow: none !important;
+              }
+              /* Hide buttons and help message when printing */
+              .print\\:hidden {
+                display: none !important;
+                height: 0 !important;
+                padding: 0 !important;
+                margin: 0 !important;
+              }
+              /* Maximize page width to fit wide tables */
+              @page {
+                size: landscape;
+                margin: 1cm;
+              }
+              /* Remove background graphics to make text crispy black */
+              tr {
+                background: none !important;
+                page-break-inside: avoid;
+              }
+            }
+          `}} />
+
           {/* Print instructions banner */}
           <div className="p-4 bg-yellow-50 border-b border-yellow-100 flex items-center justify-between text-xs text-yellow-850 font-medium print:hidden">
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 flex-wrap">
               <Info className="w-4 h-4 text-amber-500 shrink-0" />
-              Esta visualização está formatada para relatórios. Use o botão ao lado para imprimir a folha de fecho da quinzena.
+              <span>Esta visualização está formatada para relatórios. Use o botão ao lado para imprimir a folha de fecho da quinzena.</span>
+              {isInIframe && (
+                <span className="font-extrabold text-amber-900 ml-1 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200">
+                  ⚠️ Editor Ativo: Clique ao lado e use a opção "Abrir em Nova Aba" para imprimir!
+                </span>
+              )}
             </span>
             <button
               onClick={triggerPrintClose}
-              className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 py-1 px-3 rounded-lg font-bold transition-colors flex items-center gap-1 shadow-xs cursor-pointer"
+              className="bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 py-1.5 px-3.5 rounded-xl font-bold transition-all flex items-center gap-1.5 shadow-xs cursor-pointer active:scale-97"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <Printer className="w-4 h-4 text-slate-500" />
               Imprimir Fechamento
             </button>
           </div>
@@ -1666,6 +1793,196 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                 <div className="h-0.5 bg-slate-400 mx-auto w-48 mb-1" />
                 <p className="text-[10px] font-bold text-slate-600 uppercase">Controle Financeiro / Auditoria</p>
                 <p className="text-[9px] text-slate-400">Polo Paulo Afonso BA</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ACTIVE SUBVIEW 3: RESUMO PARA SETOR FINANCEIRO (PIX + ESPAÇO DE CANETA) */}
+      {activeSubView === 'finance_report' && (
+        <div id="finance-print-report" className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+          {/* Custom print CSS rule injected directly. Bulletproof for any container environment */}
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              /* Hide every element on the website */
+              body * {
+                visibility: hidden !important;
+              }
+              /* Show ONLY our printed report and its elements */
+              #finance-print-report, #finance-print-report * {
+                visibility: visible !important;
+                color: #000000 !important;
+              }
+              #finance-print-report {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 10px !important;
+                border: none !important;
+                box-shadow: none !important;
+              }
+              /* Hide buttons and help message when printing */
+              .print\\:hidden {
+                display: none !important;
+                height: 0 !important;
+                padding: 0 !important;
+                margin: 0 !important;
+              }
+              /* Maximize page width and prevent page margin cuts */
+              @page {
+                size: portrait;
+                margin: 1.5cm;
+              }
+              /* Remove background graphics to make text crispy black */
+              tr {
+                background: none !important;
+                page-break-inside: avoid;
+              }
+            }
+          `}} />
+
+          {/* Print guidance banner - only visible on screen */}
+          <div className="p-4 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between text-xs text-emerald-850 font-medium print:hidden flex-wrap gap-2">
+            <span className="flex items-center gap-2 font-bold flex-wrap">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0 inline-block animate-pulse"></span>
+              <span>Relatório Simplificado Exclusivo para o Financeiro. Clutter e informações desnecessárias (SLA, quantidades, etc) foram removidos.</span>
+              {isInIframe && (
+                <span className="font-extrabold text-emerald-900 bg-emerald-100/90 px-2 py-0.5 rounded border border-emerald-200">
+                  ⚠️ Editor Ativo: Use o botão ao lado para abrir e imprimir sem erros!
+                </span>
+              )}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={triggerPrintClose}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white py-1.5 px-4 rounded-xl font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm cursor-pointer active:scale-97"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                Imprimir Documento
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            {/* Header for printer and visual display */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-4 gap-4">
+              <div>
+                <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 print:text-black">
+                  <span className="bg-emerald-100 text-emerald-800 p-1.5 rounded-xl print:hidden">
+                    <FileText className="w-5 h-5 text-emerald-700" />
+                  </span>
+                  PROGRAMAÇÃO DE REPASSES — FINANCEIRO JADLOG
+                </h1>
+                <p className="text-xs text-slate-500 mt-1 font-medium print:text-black">
+                  Lista oficial consolidada para quitação imediata da folha financeira via PIX.
+                </p>
+              </div>
+              <div className="text-left md:text-right text-xs bg-slate-100 p-3 rounded-2xl border border-slate-150 shrink-0 flex flex-col justify-center print:bg-white print:border-none print:p-0">
+                <div>
+                  <span className="font-bold text-slate-700 print:text-black">Período: </span>
+                  <span className="font-extrabold text-slate-900 print:text-black">
+                    {selectedFortnight === 1 ? '1ª Quinzena' : '2ª Quinzena'} ({months[selectedMonth]} {selectedYear})
+                  </span>
+                </div>
+                <div className="mt-1 print:mt-0">
+                  <span className="font-bold text-slate-700 print:text-black">Referência: </span>
+                  <span className="font-mono text-slate-800 font-bold print:text-black">
+                    {selectedFortnight === 1 ? '01' : '16'} a {selectedFortnight === 1 ? '15' : '30/31'} de {months[selectedMonth]}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Compiled Financial Table with perfect simplicity */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-300 bg-slate-50 text-[10px] font-bold uppercase text-slate-600 print:bg-transparent print:border-b-2">
+                    <th className="py-2.5 px-3">Favorecido (Entregador)</th>
+                    <th className="py-2.5 px-3">Chave PIX para Transferência</th>
+                    <th className="py-2.5 px-3 text-right">Valor Líquido (R$)</th>
+                    <th className="py-2.5 px-3 text-center w-[120px]">Data Reg. (Caneta)</th>
+                    <th className="py-2.5 px-3 text-center w-[180px]">Visto / Assinatura</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {compiledReports.map((report) => (
+                    <tr key={report.driverId} className="hover:bg-slate-50/50">
+                      {/* Name Column */}
+                      <td className="py-3 px-3">
+                        <span className="font-bold text-slate-850 text-sm print:text-black">{report.driverName}</span>
+                        <span className="block text-[9px] text-slate-400 font-semibold uppercase print:text-slate-600">Rota: {report.routeAlias}</span>
+                      </td>
+
+                      {/* PIX Column */}
+                      <td className="py-3 px-3 font-mono text-xs">
+                        {report.pix ? (
+                          <div className="flex items-center gap-1.5 justify-between max-w-[240px]">
+                            <span className="font-extrabold text-slate-800 print:text-black">{report.pix}</span>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(report.pix);
+                                alert(`Copiado: ${report.pix}`);
+                              }}
+                              className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[9px] text-sky-600 hover:text-sky-800 font-sans font-bold print:hidden cursor-pointer"
+                              title="Copiar Chave"
+                            >
+                              Copiar
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-rose-600 font-bold italic text-[9px] uppercase tracking-wider bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded print:text-black print:bg-transparent print:border-none">Chave Não Informada</span>
+                        )}
+                      </td>
+
+                      {/* Payout Amount Column */}
+                      <td className="py-3 px-3 text-right font-mono font-black text-sm text-emerald-700 print:text-black">
+                        R$ {report.payoutAmount.toFixed(2)}
+                      </td>
+
+                      {/* Handwritten Date Indicator Column */}
+                      <td className="py-3 px-3 text-center font-mono text-[11px] text-slate-300">
+                        <span className="print:inline block text-slate-400 font-bold">___/___/_____</span>
+                      </td>
+
+                      {/* Signature Signoff Column */}
+                      <td className="py-3 px-3 text-center font-mono text-xs text-slate-350">
+                        <span className="print:inline block text-slate-400 font-medium">_______________________</span>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {/* Consolidado - Total Sum Row */}
+                  <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold print:bg-transparent">
+                    <td colSpan={2} className="py-4 px-3 text-right uppercase text-xs font-black text-slate-700 print:text-black">
+                      VALOR TOTAL À PROGRAMAR:
+                    </td>
+                    <td className="py-4 px-3 text-right font-mono text-base text-emerald-800 font-black print:text-black">
+                      R$ {totals.totalPayout.toFixed(2)}
+                    </td>
+                    <td colSpan={2} className="py-4 px-3 text-center text-[10px] text-slate-500 font-semibold italic print:text-black">
+                      Total de Beneficiários: {compiledReports.length}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Verification signature section at bottom */}
+            <div className="grid grid-cols-2 gap-12 mt-10 pt-8 border-t border-dashed border-slate-300">
+              <div className="text-center">
+                <div className="h-px bg-slate-400 mx-auto w-40 mb-1" />
+                <p className="text-[10px] font-bold text-slate-600 uppercase print:text-black">Conferido por (Auditoria)</p>
+                <p className="text-[8px] text-slate-400 print:text-slate-600">Data: ____/____/________</p>
+              </div>
+
+              <div className="text-center">
+                <div className="h-px bg-slate-400 mx-auto w-40 mb-1" />
+                <p className="text-[10px] font-bold text-slate-600 uppercase print:text-black">Aprovação / Autorização</p>
+                <p className="text-[8px] text-slate-400 print:text-slate-600">Assinatura Financeira</p>
               </div>
             </div>
           </div>
@@ -2396,6 +2713,41 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                 )}
               </div>
 
+              {/* Performance & Occurrences Section (SLA) */}
+              <div className="p-3.5 border-b border-sky-100 bg-sky-50/25 space-y-2">
+                <div className="flex items-center justify-between text-[10px] uppercase font-black text-sky-700 tracking-wider">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-600 inline-block shrink-0"></span>
+                    <span>Ocorrência, Pendência e SLA</span>
+                  </div>
+                  <span className={`px-1.5 py-0.2 rounded font-mono font-black text-[9px] ${
+                    Math.max(0, Math.min(100, Math.round(100 - ((shareModalReport.occurrencesCount * 5) + (shareModalReport.pendingCount * 2) + ((shareModalReport.debitLoss || 0) * 0.2))))) >= 95
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : Math.max(0, Math.min(100, Math.round(100 - ((shareModalReport.occurrencesCount * 5) + (shareModalReport.pendingCount * 2) + ((shareModalReport.debitLoss || 0) * 0.2))))) >= 85
+                        ? 'bg-orange-100 text-orange-800'
+                        : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    SLA: {Math.max(0, Math.min(100, Math.round(100 - ((shareModalReport.occurrencesCount * 5) + (shareModalReport.pendingCount * 2) + ((shareModalReport.debitLoss || 0) * 0.2)))))}%
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 text-center">
+                  {/* Ocorrências */}
+                  <div className="bg-white border border-sky-150 rounded-xl p-1.5 flex flex-col justify-between min-h-[48px]">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight block">Ocorrências</span>
+                    <span className="text-[11px] font-mono font-extrabold text-sky-700 mt-1 block">
+                      {shareModalReport.occurrencesCount}
+                    </span>
+                  </div>
+                  {/* Pendências */}
+                  <div className="bg-white border border-sky-150 rounded-xl p-1.5 flex flex-col justify-between min-h-[48px]">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight block">Pendências</span>
+                    <span className="text-[11px] font-mono font-extrabold text-sky-700 mt-1 block">
+                      {shareModalReport.pendingCount}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Sub-card detail band */}
               <div className="p-3.5 bg-slate-50 border-b border-slate-100 flex flex-col gap-1.5 text-xs text-slate-600">
                 <div className="flex justify-between items-center text-[11px]">
@@ -2445,6 +2797,77 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
 
               {/* Red bottom accent line */}
               <div className="h-1.5 bg-[#e31a1a] w-full" />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: INSTRUÇÕES DE IMPRESSÃO IMPORTANTES (PARA AMBIENTE IFRAME) */}
+      {showPrintInstructions && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-xs print:hidden animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="bg-[#e31a1a] text-white p-5 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-white/10 rounded-xl">
+                  <Printer className="w-5 h-5 text-white animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black tracking-tight font-sans">Como Imprimir no AI Studio</h3>
+                  <p className="text-[10px] text-rose-100 mt-0.5 font-sans font-medium">Instruções para salvar em PDF ou imprimir sem erros</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowPrintInstructions(false)}
+                className="text-white/80 hover:text-white hover:bg-white/15 p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content body */}
+            <div className="p-6 space-y-4 font-sans text-slate-700 text-xs">
+              <p className="font-semibold leading-relaxed">
+                Navegadores de internet modernos bloqueiam ou desconfiguram a impressão de páginas que estão sendo mostradas dentro de outros sites (como o visualizador do AI Studio).
+              </p>
+              
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 space-y-2 text-amber-950">
+                <span className="font-black text-xs block">💡 Passo Único Resolutivo:</span>
+                <p className="leading-relaxed font-medium">
+                  Clique no botão verde <strong className="text-emerald-800">"Abrir em Nova Aba"</strong> abaixo. Na nova página limpa aberta, basta clicar em Imprimir normalmente que funcionará perfeitamente!
+                </p>
+              </div>
+
+              <div className="space-y-2.5 pt-2">
+                <div className="flex gap-2.5 items-start">
+                  <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black shrink-0 border border-slate-250 text-slate-500">1</span>
+                  <p className="mt-0.5 leading-relaxed">Clique no botão <strong className="text-emerald-600">"Abrir em Nova Aba"</strong>.</p>
+                </div>
+                <div className="flex gap-2.5 items-start">
+                  <span className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black shrink-0 border border-slate-250 text-slate-500">2</span>
+                  <p className="mt-0.5 leading-relaxed">Na nova aba, clique no botão de impressão ou pressione o atalho do teclado: <kbd className="px-1.5 py-0.5 bg-slate-100 border rounded font-mono text-[10px] font-bold text-slate-800">Ctrl + P</kbd> / <kbd className="px-1.5 py-0.5 bg-slate-100 border rounded font-mono text-[10px] font-bold text-slate-800">Cmd + P</kbd>.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer with action */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex gap-2 shrink-0 justify-end">
+              <button
+                onClick={() => setShowPrintInstructions(false)}
+                className="px-4 py-2 border border-slate-250 bg-white hover:bg-slate-50 text-slate-700 rounded-xl font-bold text-xs cursor-pointer shadow-xs"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setShowPrintInstructions(false);
+                  window.open(window.location.href, '_blank');
+                }}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs cursor-pointer flex items-center gap-1.5 shadow-md active:scale-97 transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Abrir em Nova Aba
+              </button>
             </div>
           </div>
         </div>
