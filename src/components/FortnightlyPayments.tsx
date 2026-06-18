@@ -1901,69 +1901,97 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-300 bg-slate-50 text-[10px] font-bold uppercase text-slate-600 print:bg-transparent print:border-b-2">
-                    <th className="py-2.5 px-3">Favorecido (Entregador)</th>
-                    <th className="py-2.5 px-3">Chave PIX para Transferência</th>
-                    <th className="py-2.5 px-3 text-right">Valor Líquido (R$)</th>
-                    <th className="py-2.5 px-3 text-center w-[120px]">Data Reg. (Caneta)</th>
-                    <th className="py-2.5 px-3 text-center w-[180px]">Visto / Assinatura</th>
+                    <th className="py-2.5 px-4 w-[45%]">Detalhamento Simplificado do Repasse</th>
+                    <th className="py-2.5 px-4 w-[25%]">Chave PIX (Programação)</th>
+                    <th className="py-2.5 px-4 w-[30%]">Controle e Observações (Financeiro)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
                   {compiledReports.map((report) => (
-                    <tr key={report.driverId} className="hover:bg-slate-50/50">
-                      {/* Name Column */}
-                      <td className="py-3 px-3">
-                        <span className="font-bold text-slate-850 text-sm print:text-black">{report.driverName}</span>
-                        <span className="block text-[9px] text-slate-400 font-semibold uppercase print:text-slate-600">Rota: {report.routeAlias}</span>
+                    <tr key={report.driverId} className="hover:bg-slate-50/50 print:break-inside-avoid">
+                      {/* Name, Qtd, and Value on 3 dedicated lines */}
+                      <td className="py-4 px-4 space-y-1">
+                        {/* Linha 1: O nome do entregador */}
+                        <div className="text-sm font-black text-slate-900 tracking-tight">
+                          {report.driverName} <span className="text-slate-500 font-bold text-xs uppercase tracking-wide">({report.routeAlias})</span>
+                        </div>
+
+                        {/* Linha 2: Quantidade de entregas realizadas no período */}
+                        <div className="text-xs text-slate-600 font-semibold flex items-center gap-1.5">
+                          <span className="text-slate-400">Entregas no período:</span>
+                          <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 font-extrabold print:bg-transparent print:p-0">
+                            {report.standardCount + report.nonStandardCount} pacotes
+                          </span>
+                        </div>
+
+                        {/* Linha 3: Valor a ser pago */}
+                        <div className="text-xs text-slate-600 font-semibold flex items-center gap-1.5">
+                          <span className="text-slate-400">Valor a ser pago:</span>
+                          <span className="font-mono text-emerald-700 text-sm font-black bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 print:bg-transparent print:border-none print:p-0">
+                            R$ {report.payoutAmount.toFixed(2)}
+                          </span>
+                        </div>
                       </td>
 
-                      {/* PIX Column */}
-                      <td className="py-3 px-3 font-mono text-xs">
+                      {/* PIX Column for immediate transfer reference */}
+                      <td className="py-4 px-4 font-mono text-xs">
                         {report.pix ? (
-                          <div className="flex items-center gap-1.5 justify-between max-w-[240px]">
-                            <span className="font-extrabold text-slate-800 print:text-black">{report.pix}</span>
+                          <div className="flex items-center gap-1.5 justify-between max-w-[220px] bg-slate-50 border border-slate-200 rounded-xl p-2 print:bg-transparent print:border-none print:p-0">
+                            <span className="font-extrabold text-slate-800 tracking-tight print:text-black">{report.pix}</span>
                             <button
                               onClick={() => {
                                 navigator.clipboard.writeText(report.pix);
                                 alert(`Copiado: ${report.pix}`);
                               }}
-                              className="px-1.5 py-0.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded text-[9px] text-sky-600 hover:text-sky-800 font-sans font-bold print:hidden cursor-pointer"
+                              className="px-2 py-0.5 bg-white hover:bg-slate-100 text-[9px] text-sky-600 hover:text-sky-850 font-sans font-bold border border-slate-250 rounded-lg shadow-2xs cursor-pointer print:hidden transition-colors"
                               title="Copiar Chave"
                             >
                               Copiar
                             </button>
                           </div>
                         ) : (
-                          <span className="text-rose-600 font-bold italic text-[9px] uppercase tracking-wider bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded print:text-black print:bg-transparent print:border-none">Chave Não Informada</span>
+                          <span className="text-rose-600 font-bold italic text-[9px] uppercase tracking-wider bg-rose-50 border border-rose-100 px-2 py-1 rounded print:text-black print:bg-transparent print:border-none">Chave Não Informada</span>
                         )}
                       </td>
 
-                      {/* Payout Amount Column */}
-                      <td className="py-3 px-3 text-right font-mono font-black text-sm text-emerald-700 print:text-black">
-                        R$ {report.payoutAmount.toFixed(2)}
-                      </td>
+                      {/* Espaço ao lado para observações do financeiro */}
+                      <td className="py-4 px-4 space-y-3">
+                        {/* Fields for payment date and voucher / signature reference */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Data de Pago</span>
+                            <div className="text-[10px] text-slate-300 font-bold border-b border-slate-200 pt-0.5 pb-1 print:text-slate-400">
+                              ____/____/________
+                            </div>
+                          </div>
+                          <div>
+                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Visto / Assinatura</span>
+                            <div className="text-[10px] text-slate-300 font-bold border-b border-slate-200 pt-0.5 pb-1 print:text-slate-400">
+                              __________________
+                            </div>
+                          </div>
+                        </div>
 
-                      {/* Handwritten Date Indicator Column */}
-                      <td className="py-3 px-3 text-center font-mono text-[11px] text-slate-300">
-                        <span className="print:inline block text-slate-400 font-bold">___/___/_____</span>
-                      </td>
-
-                      {/* Signature Signoff Column */}
-                      <td className="py-3 px-3 text-center font-mono text-xs text-slate-350">
-                        <span className="print:inline block text-slate-400 font-medium">_______________________</span>
+                        {/* Large note line box/blank placeholder for financial observations */}
+                        <div>
+                          <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Observações do Financeiro</span>
+                          <div className="text-[10px] text-slate-300 font-bold border-b border-slate-200 pt-0.5 pb-1 h-5 print:text-slate-400">
+                            &nbsp;
+                          </div>
+                        </div>
                       </td>
                     </tr>
                   ))}
 
                   {/* Consolidado - Total Sum Row */}
                   <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold print:bg-transparent">
-                    <td colSpan={2} className="py-4 px-3 text-right uppercase text-xs font-black text-slate-700 print:text-black">
-                      VALOR TOTAL À PROGRAMAR:
+                    <td className="py-4 px-4 uppercase text-xs font-black text-slate-700 print:text-black">
+                      VALOR TOTAL À PROGRAMAR CONSOLIDADO:
                     </td>
-                    <td className="py-4 px-3 text-right font-mono text-base text-emerald-800 font-black print:text-black">
+                    <td className="py-4 px-4 font-mono text-base text-emerald-800 font-black print:text-black">
                       R$ {totals.totalPayout.toFixed(2)}
                     </td>
-                    <td colSpan={2} className="py-4 px-3 text-center text-[10px] text-slate-500 font-semibold italic print:text-black">
+                    <td className="py-4 px-4 text-center text-[10px] text-slate-500 font-bold italic print:text-black">
                       Total de Beneficiários: {compiledReports.length}
                     </td>
                   </tr>
