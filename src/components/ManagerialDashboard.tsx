@@ -128,6 +128,12 @@ export default function ManagerialDashboard({
     return saved ? JSON.parse(saved) : [];
   });
 
+  // Track excluded/deleted card IDs across sessions to keep dashboard sync'd
+  const [deletedCouriers] = useState<string[]>(() => {
+    const saved = localStorage.getItem('jadlog_deleted_couriers');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   // Merged standard and dynamically added couriers matching FortnightlyPayments logic
   const allCouriers = useMemo(() => {
     const standard = drivers.map(d => {
@@ -152,8 +158,8 @@ export default function ManagerialDashboard({
         isCustom: true,
       };
     });
-    return [...standard, ...custom];
-  }, [drivers, customCouriers, driverMappings]);
+    return [...standard, ...custom].filter(c => !deletedCouriers.includes(c.id));
+  }, [drivers, customCouriers, driverMappings, deletedCouriers]);
 
   // Seed historical data if missing to make past comparative charts instantly beautiful and functional
   useEffect(() => {
