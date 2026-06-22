@@ -1876,152 +1876,62 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
             </div>
           </div>
 
-          <div className="p-6 space-y-6">
-            {/* Header for printer and visual display */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-4 gap-4">
-              <div>
-                <h1 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2 print:text-black">
-                  <span className="bg-emerald-100 text-emerald-800 p-1.5 rounded-xl print:hidden">
-                    <FileText className="w-5 h-5 text-emerald-700" />
-                  </span>
-                  PROGRAMAÇÃO DE REPASSES — FINANCEIRO JADLOG
-                </h1>
-                <p className="text-xs text-slate-500 mt-1 font-medium print:text-black">
-                  Lista oficial consolidada para quitação imediata da folha financeira via PIX.
-                </p>
-              </div>
-              <div className="text-left md:text-right text-xs bg-slate-100 p-3 rounded-2xl border border-slate-150 shrink-0 flex flex-col justify-center print:bg-white print:border-none print:p-0">
-                <div>
-                  <span className="font-bold text-slate-700 print:text-black">Período: </span>
-                  <span className="font-extrabold text-slate-900 print:text-black">
-                    {selectedFortnight === 1 ? '1ª Quinzena' : '2ª Quinzena'} ({months[selectedMonth]} {selectedYear})
-                  </span>
-                </div>
-                <div className="mt-1 print:mt-0">
-                  <span className="font-bold text-slate-700 print:text-black">Referência: </span>
-                  <span className="font-mono text-slate-800 font-bold print:text-black">
-                    {selectedFortnight === 1 ? '01' : '16'} a {selectedFortnight === 1 ? '15' : '30/31'} de {months[selectedMonth]}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Compiled Financial Table with perfect simplicity */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+          <div className="p-6">
+            <div className="overflow-x-auto max-w-4xl mx-auto">
+              <table className="w-full text-left border-collapse border-2 border-black font-sans">
                 <thead>
-                  <tr className="border-b border-slate-300 bg-slate-50 text-[10px] font-bold uppercase text-slate-600 print:bg-transparent print:border-b-2">
-                    <th className="py-2.5 px-4 w-[45%]">Detalhamento Simplificado do Repasse</th>
-                    <th className="py-2.5 px-4 w-[25%]">Chave PIX (Programação)</th>
-                    <th className="py-2.5 px-4 w-[30%]">Controle e Observações (Financeiro)</th>
+                  <tr className="border-[3px] border-black bg-white">
+                    <th className="py-3 px-4 border border-black font-black text-xs tracking-wider text-[#e31a1a] uppercase">
+                      {(months[selectedMonth] || "").toUpperCase()} {selectedFortnight}. QUINZENA
+                    </th>
+                    <th className="py-3 px-4 border border-black font-black text-xs tracking-wider text-[#e31a1a] text-center w-[25%]">
+                      R$
+                    </th>
+                    <th className="py-3 px-4 border border-black font-black text-xs tracking-wider text-[#e31a1a] text-center w-[30%]">
+                      DATA DE PAGAMENTO
+                    </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {compiledReports.map((report) => (
-                    <tr key={report.driverId} className="hover:bg-slate-50/50 print:break-inside-avoid">
-                      {/* Name, Qtd, and Value on 3 dedicated lines */}
-                      <td className="py-4 px-4 space-y-1">
-                        {/* Linha 1: O nome do entregador */}
-                        <div className="text-sm font-black text-slate-900 tracking-tight">
-                          {report.driverName} <span className="text-slate-500 font-bold text-xs uppercase tracking-wide">({report.routeAlias})</span>
-                        </div>
+                <tbody className="divide-y divide-black">
+                  {compiledReports.map((report) => {
+                    const formattedRoute = report.routeAlias || '';
+                    const formattedDriver = report.driverName || '';
+                    
+                    // Format as ROTA NAME - DRIVER NAME if both exist and differ, otherwise just route
+                    const joinName = formattedRoute && formattedDriver && formattedRoute !== formattedDriver
+                      ? `${formattedRoute} - ${formattedDriver}`
+                      : (formattedRoute || formattedDriver || '');
+                    const displayName = joinName.toUpperCase();
 
-                        {/* Linha 2: Quantidade de entregas realizadas no período */}
-                        <div className="text-xs text-slate-600 font-semibold flex items-center gap-1.5">
-                          <span className="text-slate-400">Entregas no período:</span>
-                          <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 font-extrabold print:bg-transparent print:p-0">
-                            {report.standardCount + report.nonStandardCount} pacotes
-                          </span>
-                        </div>
-
-                        {/* Linha 3: Valor a ser pago */}
-                        <div className="text-xs text-slate-600 font-semibold flex items-center gap-1.5">
-                          <span className="text-slate-400">Valor a ser pago:</span>
-                          <span className="font-mono text-emerald-700 text-sm font-black bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 print:bg-transparent print:border-none print:p-0">
-                            R$ {report.payoutAmount.toFixed(2)}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* PIX Column for immediate transfer reference */}
-                      <td className="py-4 px-4 font-mono text-xs">
-                        {report.pix ? (
-                          <div className="flex items-center gap-1.5 justify-between max-w-[220px] bg-slate-50 border border-slate-200 rounded-xl p-2 print:bg-transparent print:border-none print:p-0">
-                            <span className="font-extrabold text-slate-800 tracking-tight print:text-black">{report.pix}</span>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(report.pix);
-                                alert(`Copiado: ${report.pix}`);
-                              }}
-                              className="px-2 py-0.5 bg-white hover:bg-slate-100 text-[9px] text-sky-600 hover:text-sky-850 font-sans font-bold border border-slate-250 rounded-lg shadow-2xs cursor-pointer print:hidden transition-colors"
-                              title="Copiar Chave"
-                            >
-                              Copiar
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="text-rose-600 font-bold italic text-[9px] uppercase tracking-wider bg-rose-50 border border-rose-100 px-2 py-1 rounded print:text-black print:bg-transparent print:border-none">Chave Não Informada</span>
-                        )}
-                      </td>
-
-                      {/* Espaço ao lado para observações do financeiro */}
-                      <td className="py-4 px-4 space-y-3">
-                        {/* Fields for payment date and voucher / signature reference */}
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Data de Pago</span>
-                            <div className="text-[10px] text-slate-300 font-bold border-b border-slate-200 pt-0.5 pb-1 print:text-slate-400">
-                              ____/____/________
-                            </div>
-                          </div>
-                          <div>
-                            <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Visto / Assinatura</span>
-                            <div className="text-[10px] text-slate-300 font-bold border-b border-slate-200 pt-0.5 pb-1 print:text-slate-400">
-                              __________________
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Large note line box/blank placeholder for financial observations */}
-                        <div>
-                          <span className="block text-[8px] font-black text-slate-400 uppercase tracking-wider">Observações do Financeiro</span>
-                          <div className="text-[10px] text-slate-300 font-bold border-b border-slate-200 pt-0.5 pb-1 h-5 print:text-slate-400">
-                            &nbsp;
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-
-                  {/* Consolidado - Total Sum Row */}
-                  <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold print:bg-transparent">
-                    <td className="py-4 px-4 uppercase text-xs font-black text-slate-700 print:text-black">
-                      VALOR TOTAL À PROGRAMAR CONSOLIDADO:
+                    return (
+                      <tr key={report.driverId} className="hover:bg-slate-50/50 print:break-inside-avoid">
+                        <td className="py-3 px-4 border border-black text-xs font-bold text-slate-900 tracking-tight leading-snug">
+                          {displayName}
+                        </td>
+                        <td className="py-3 px-4 border border-black text-xs font-bold font-mono text-slate-900 text-right pr-6">
+                          R$&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{report.payoutAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td className="py-3 px-4 border border-black bg-white w-[30%] h-10">
+                          {/* Blank cell for payment date */}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  
+                  {/* Total row at the bottom of the table */}
+                  <tr className="border-[3px] border-black bg-slate-50/60 font-black print:bg-transparent">
+                    <td className="py-3 px-4 border border-black text-xs font-black text-[#e31a1a] tracking-tight uppercase">
+                      TOTAL
                     </td>
-                    <td className="py-4 px-4 font-mono text-base text-emerald-800 font-black print:text-black">
-                      R$ {totals.totalPayout.toFixed(2)}
+                    <td className="py-3 px-4 border border-black text-xs font-black font-mono text-[#e31a1a] text-right pr-6">
+                      R$&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{totals.totalPayout.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td className="py-4 px-4 text-center text-[10px] text-slate-500 font-bold italic print:text-black">
-                      Total de Beneficiários: {compiledReports.length}
+                    <td className="py-3 px-4 border border-black bg-white w-[30%] h-10">
+                      {/* Blank cell */}
                     </td>
                   </tr>
                 </tbody>
               </table>
-            </div>
-
-            {/* Verification signature section at bottom */}
-            <div className="grid grid-cols-2 gap-12 mt-10 pt-8 border-t border-dashed border-slate-300">
-              <div className="text-center">
-                <div className="h-px bg-slate-400 mx-auto w-40 mb-1" />
-                <p className="text-[10px] font-bold text-slate-600 uppercase print:text-black">Conferido por (Auditoria)</p>
-                <p className="text-[8px] text-slate-400 print:text-slate-600">Data: ____/____/________</p>
-              </div>
-
-              <div className="text-center">
-                <div className="h-px bg-slate-400 mx-auto w-40 mb-1" />
-                <p className="text-[10px] font-bold text-slate-600 uppercase print:text-black">Aprovação / Autorização</p>
-                <p className="text-[8px] text-slate-400 print:text-slate-600">Assinatura Financeira</p>
-              </div>
             </div>
           </div>
         </div>
