@@ -8,7 +8,8 @@ import {
   Legend, 
   ResponsiveContainer, 
   CartesianGrid,
-  Cell
+  Cell,
+  LabelList
 } from 'recharts';
 import { 
   TrendingUp, 
@@ -27,7 +28,8 @@ import {
   ArrowUpRight,
   TrendingDown,
   Percent,
-  Check
+  Check,
+  Printer
 } from 'lucide-react';
 import { Driver, FortnightlyLedgerRecord } from '../types';
 import { DRIVER_ROUTE_MAPPING, isCopav } from './FortnightlyPayments';
@@ -134,6 +136,29 @@ export default function ManagerialDashboard({
     return saved ? JSON.parse(saved) : [];
   });
 
+  // State to toggle between the Standard absolute penalty model or the Fair logistics rate model
+  const [rankingModel, setRankingModel] = useState<'standard' | 'logistics_fair'>(() => {
+    const saved = localStorage.getItem('jadlog_ranking_model');
+    return saved === 'standard' ? 'standard' : 'logistics_fair'; // Default to fair logistics model
+  });
+
+  const handleToggleRankingModel = (model: 'standard' | 'logistics_fair') => {
+    setRankingModel(model);
+    localStorage.setItem('jadlog_ranking_model', model);
+  };
+
+  // State for active view (dashboard overview vs pdf_presentation landscape report)
+  const [activeSubView, setActiveSubView] = useState<'dashboard' | 'pdf_presentation'>('dashboard');
+  const [printLayout, setPrintLayout] = useState<'both' | 'chart1_only' | 'chart2_only'>('both');
+  const [isInIframe, setIsInIframe] = useState(false);
+  useEffect(() => {
+    try {
+      setIsInIframe(window.self !== window.top);
+    } catch (e) {
+      setIsInIframe(true);
+    }
+  }, []);
+
   // Merged standard and dynamically added couriers matching FortnightlyPayments logic
   const allCouriers = useMemo(() => {
     const standard = drivers.map(d => {
@@ -166,18 +191,9 @@ export default function ManagerialDashboard({
     const saved = localStorage.getItem('jadlog_fortnightly_ledger');
     let loaded: Record<string, FortnightlyLedgerRecord> = saved ? JSON.parse(saved) : {};
     
-    // Clean out previous months' data (Maio, Abril, Março, Fevereiro, Janeiro - months 0 to 4)
+    // Seed all months Jan-Jun YTD (months 0 to 5) of 2026
     let modified = false;
-    Object.keys(loaded).forEach((key) => {
-      const rec = loaded[key];
-      if (rec && typeof rec.month === 'number' && rec.month < 5) {
-        delete loaded[key];
-        modified = true;
-      }
-    });
-
-    // Seed only June (month index 5, representing June 2026)
-    const monthsToSeed = [5]; 
+    const monthsToSeed = [0, 1, 2, 3, 4, 5]; 
     const fortnightsToSeed: Array<1 | 2> = [1, 2];
 
     const driverIds = allCouriers.map(d => d.id);
@@ -403,16 +419,43 @@ export default function ManagerialDashboard({
       const debits = (rec.debitAdvance || 0) + (rec.debitFuel || 0) + (rec.debitLoss || 0);
       const totalDeliveries = rec.standardCount + (isCopav(route) ? 0 : rec.nonStandardCount);
 
-      // Balanced performance Score (SLA): Calculated proportionally.
-      // - Each manual Occurrence counts as -5% SLA
-      // - Each Pending counts as -2% SLA
-      // - Each R$ of Multa/Extravio (debitLoss) counts as -0.20% SLA (e.g. R$100 multa = -20% SLA)
       let efficiency = 100;
-      if (rec.standardCount > 0 || rec.nonStandardCount > 0 || rec.occurrencesCount > 0 || rec.pendingCount > 0 || (rec.debitLoss || 0) > 0) {
-        const occurrencesPenalty = rec.occurrencesCount * 5;
-        const pendingPenalty = rec.pendingCount * 2;
-        const finesPenalty = (rec.debitLoss || 0) * 0.20;
-        efficiency = Math.max(0, Math.min(100, Math.round(100 - (occurrencesPenalty + pendingPenalty + finesPenalty))));
+      
+      if (rankingModel === 'standard') {
+        // Balanced performance Score (SLA): Calculated proportionally.
+        // - Each manual Occurrence counts as -5% SLA
+        // - Each Pending counts as -2% SLA
+        // - Each R$ of Multa/Extravio (debitLoss) counts as -0.20% SLA (e.g. R$100 multa = -20% SLA)
+        if (rec.standardCount > 0 || rec.nonStandardCount > 0 || rec.occurrencesCount > 0 || rec.pendingCount > 0 || (rec.debitLoss || 0) > 0) {
+          const occurrencesPenalty = rec.occurrencesCount * 5;
+          const pendingPenalty = rec.pendingCount * 2;
+          const finesPenalty = (rec.debitLoss || 0) * 0.20;
+          efficiency = Math.max(0, Math.min(100, Math.round(100 - (occurrencesPenalty + pendingPenalty + finesPenalty))));
+        }
+      } else {
+        // 'logistics_fair' - Volume-Weighted Fair Model
+        // Penalties are proportional to the actual work done (errors relative to total deliveries volume)
+        if (totalDeliveries > 0 || rec.occurrencesCount > 0 || rec.pendingCount > 0 || (rec.debitLoss || 0) > 0) {
+          const denomDeliveries = Math.max(1, totalDeliveries);
+          const denomPayout = Math.max(1, rec.payoutAmount);
+
+          // Proportional occurrence frequency (e.g. 1% error rate on deliveries)
+          const occurrencesRate = (rec.occurrencesCount / denomDeliveries) * 100;
+          // Proportional pending rate
+          const pendingRate = (rec.pendingCount / denomDeliveries) * 100;
+          // Proportional financial loss index (loss compared to gross revenues/payouts)
+          const lossRate = ((rec.debitLoss || 0) / denomPayout) * 100;
+
+          // Scaled penalty weights:
+          // Occurrence Rate: 1% occurrences relative to volume = -10.0% SLA
+          // Pending Rate: 1% pendings relative to volume = -3.0% SLA
+          // Loss Index: 1% of total earnings lost due to fines = -1.5% SLA
+          const occurrencesPenalty = occurrencesRate * 10;
+          const pendingPenalty = pendingRate * 3;
+          const finesPenalty = lossRate * 1.5;
+
+          efficiency = Math.max(0, Math.min(100, Math.round(100 - (occurrencesPenalty + pendingPenalty + finesPenalty))));
+        }
       }
 
       return {
@@ -432,7 +475,7 @@ export default function ManagerialDashboard({
         payoutFormatted: `R$ ${rec.payoutAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       };
     });
-  }, [currentPeriodRecords, drivers]);
+  }, [currentPeriodRecords, allCouriers, driverMappings, rankingModel]);
 
   // Ranking of courier of selected period ordered by Efficiency rating & total deliveries
   const courierRanking = useMemo(() => {
@@ -459,6 +502,434 @@ export default function ManagerialDashboard({
     });
   }, [courierPerformanceList]);
 
+  // A4 Chart 1 Data: Total deliveries per month across the year for comparative analysis
+  const chart1Data = useMemo(() => {
+    // Show months Jan-Jun (indices 0 to 5)
+    const list = [0, 1, 2, 3, 4, 5];
+    return list.map(mIndex => {
+      let deliveriesCount = 0;
+
+      allCouriers.forEach(drv => {
+        if (periodType === '15_days') {
+          // Compare active fortnight across all months
+          const key = `${selectedYear}-${mIndex}-${selectedFortnight}-${drv.id}`;
+          const rec = ledger[key];
+          if (rec) {
+            const isFiorino = (driverMappings[rec.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
+            deliveriesCount += rec.standardCount + (isFiorino ? 0 : rec.nonStandardCount);
+          }
+        } else {
+          // Full Month comparisons: sum of first and second fortnights for all couriers
+          const key1 = `${selectedYear}-${mIndex}-1-${drv.id}`;
+          const key2 = `${selectedYear}-${mIndex}-2-${drv.id}`;
+          const rec1 = ledger[key1];
+          const rec2 = ledger[key2];
+
+          if (rec1) {
+            const isFiorino = (driverMappings[rec1.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
+            deliveriesCount += rec1.standardCount + (isFiorino ? 0 : rec1.nonStandardCount);
+          }
+          if (rec2) {
+            const isFiorino = (driverMappings[rec2.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
+            deliveriesCount += rec2.standardCount + (isFiorino ? 0 : rec2.nonStandardCount);
+          }
+        }
+      });
+
+      return {
+        name: MONTH_NAMES[mIndex].substring(0, 3) + '.', // short name for elegant axis labels, e.g., "Jan.", "Fev."
+        'Pacotes': deliveriesCount
+      };
+    });
+  }, [ledger, allCouriers, selectedYear, selectedFortnight, periodType, driverMappings]);
+
+  // A4 Chart 2 Data: Top 5 best couriers/routes based on SLA efficiency
+  const chart2Data = useMemo(() => {
+    return [...courierPerformanceList]
+      .sort((a, b) => b.efficiency - a.efficiency || b.totalDeliveries - a.totalDeliveries)
+      .slice(0, 5)
+      .map((item, idx) => ({
+        name: item.route,
+        'SLA %': item.efficiency,
+        driver: item.driverName,
+        entregas: item.totalDeliveries,
+        rank: idx + 1
+      }));
+  }, [courierPerformanceList]);
+
+  if (activeSubView === 'pdf_presentation') {
+    return (
+      <div className="space-y-6 font-sans">
+        {/* Custom landscape print CSS rule injected directly. Guaranteed encapsulation! */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            /* Hide every element on the website */
+            body * {
+              visibility: hidden !important;
+            }
+            /* Show ONLY our printed presentation mock and its children */
+            #a4-presentation-container, #a4-presentation-container * {
+              visibility: visible !important;
+              color: #000000 !important;
+            }
+            #a4-presentation-container {
+              position: absolute !important;
+              left: 0 !important;
+              top: 0 !important;
+              width: 297mm !important;
+              height: 210mm !important;
+              max-width: 100% !important;
+              max-height: 100% !important;
+              margin: 0 !important;
+              padding: 12mm 15mm !important;
+              border: none !important;
+              box-shadow: none !important;
+              background: #ffffff !important;
+            }
+            .print\\:hidden {
+              display: none !important;
+              height: 0 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+            }
+            @page {
+              size: landscape;
+              margin: 4mm;
+            }
+            /* Force side-by-side elements in print A4 or full page based on setup */
+            .print-grid {
+              display: grid !important;
+              grid-template-columns: ${printLayout === 'both' ? 'repeat(2, minmax(0, 1fr))' : '1fr'} !important;
+              gap: 2rem !important;
+            }
+            .print-chart {
+              height: 380px !important;
+            }
+            .print-text-dark {
+              color: #000000 !important;
+            }
+          }
+        `}} />
+
+        {/* Dynamic Controls Segment - Visible on Screen, Hidden on Print */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5 print:hidden">
+          <div className="space-y-1">
+            <div className="flex items-center gap-1.5 text-[#e31a1a] font-extrabold text-xs uppercase tracking-wider">
+              <Sparkles className="w-4 h-4 text-[#e31a1a]" />
+              <span>Painel Executivo de Apresentação</span>
+            </div>
+            <h2 className="text-lg font-black text-slate-905 tracking-tight">
+              Modo de Exportação e Apresentação A4 (PDF Paisagem)
+            </h2>
+            <p className="text-xs text-slate-500">
+              Configure os filtros desejados. Esta tela simula perfeitamente uma folha A4 em formato Paisagem (Horizontal).
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2.5 border border-slate-200 rounded-2xl shrink-0">
+            {/* 15 Days vs Full Month Switcher */}
+            <div className="flex bg-slate-200 p-0.5 rounded-xl gap-0.5">
+              <button
+                onClick={() => setPeriodType('15_days')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${periodType === '15_days' ? 'bg-[#e31a1a] text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                15 Dias
+              </button>
+              <button
+                onClick={() => setPeriodType('month')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer ${periodType === 'month' ? 'bg-[#e31a1a] text-white shadow-xs' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                Mensal
+              </button>
+            </div>
+
+            {/* Calendars Selectors */}
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-orange-500 cursor-pointer"
+              >
+                {MONTH_NAMES.map((name, idx) => (
+                  <option key={name} value={idx}>{name}</option>
+                ))}
+              </select>
+
+              {periodType === '15_days' && (
+                <select
+                  value={selectedFortnight}
+                  onChange={(e) => setSelectedFortnight(Number(e.target.value) as 1 | 2)}
+                  className="text-xs font-bold text-orange-700 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-orange-500 cursor-pointer"
+                >
+                  <option value={1}>1ª Qz. (1-15)</option>
+                  <option value={2}>2ª Qz. (16-31)</option>
+                </select>
+              )}
+
+              <select
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg px-2 py-1 outline-orange-500 cursor-pointer"
+              >
+                <option value={2026}>2026</option>
+                <option value={2025}>2025</option>
+              </select>
+            </div>
+
+            {/* Print Layout Selection Dropdown */}
+            <div className="flex items-center gap-1">
+              <select
+                value={printLayout}
+                onChange={(e) => setPrintLayout(e.target.value as 'both' | 'chart1_only' | 'chart2_only')}
+                className="text-xs font-black text-slate-800 bg-amber-55 border border-amber-200 hover:bg-amber-100/80 rounded-lg px-2.5 py-1.5 outline-orange-500 cursor-pointer"
+              >
+                <option value="both">Ambos (Lado a Lado)</option>
+                <option value="chart1_only">Apenas Gráfico 1 (Histórico de Volumes)</option>
+                <option value="chart2_only">Apenas Gráfico 2 (Top 5 SLA)</option>
+              </select>
+            </div>
+
+            {/* Ranking Model Selection */}
+            <select
+              value={rankingModel}
+              onChange={(e) => handleToggleRankingModel(e.target.value as 'standard' | 'logistics_fair')}
+              className="text-xs font-black text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-orange-500 cursor-pointer"
+            >
+              <option value="logistics_fair">Taxa Diferencial Logístico (Justo)</option>
+              <option value="standard">Dedução Estática Clássica</option>
+            </select>
+
+            <button
+              onClick={() => window.print()}
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Imprimir / Salvar PDF
+            </button>
+
+            <button
+              onClick={() => setActiveSubView('dashboard')}
+              className="px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white text-xs font-black rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+              Voltar
+            </button>
+          </div>
+        </div>
+
+        {isInIframe && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs font-bold text-amber-900 flex items-center gap-3 print:hidden">
+            <span className="bg-amber-100 text-amber-800 px-2 py-1 rounded-md text-[10px] uppercase font-black">Nota do Iframe</span>
+            <p>Atalho Gerencial: Utilizando a visualização em Iframe do Editor. Para imprimir em tamanho original sem cortes, por favor clique no botão "Abrir em Nova Aba" localizado no painel superior direito.</p>
+          </div>
+        )}
+
+        {/* Widescreen simulation of an A4 horizontal page (A4 layout matches 1.414 standard aspect ratio) */}
+        <div className="flex justify-center bg-slate-100/50 p-1 md:p-4 rounded-3xl border border-slate-200/50 print:bg-white print:border-none print:p-0">
+          <div 
+            id="a4-presentation-container" 
+            className="bg-white border-2 border-black shadow-xl rounded-2xl p-6 md:p-8 w-full max-w-[297mm] min-h-[210mm] flex flex-col justify-between print:border-none print:shadow-none print:p-0 print:m-0"
+          >
+            {/* Header section (strictly elegant) */}
+            <div className="border-b-[3px] border-black pb-4 mb-4 flex justify-between items-end">
+              <div className="flex items-center gap-3">
+                <div className="bg-black text-white px-3 py-1.5 font-sans font-black text-base flex items-center tracking-tight leading-none">
+                  <span>JAD</span>
+                  <span className="text-[#e31a1a]">LOG</span>
+                </div>
+                <div>
+                  <h1 className="text-base font-black text-slate-900 tracking-tight uppercase leading-snug">
+                    RELATÓRIO EXECUTIVO — DESEMPENHO OPERACIONAL
+                  </h1>
+                  <p className="text-[10px] text-slate-500 font-extrabold tracking-normal uppercase leading-none">
+                    Análise e Auditoria Consolidada de Distribuição Secundária • Redes Parceiras
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <span className="text-[9px] font-black text-slate-400 block uppercase tracking-wider">Período de Referência</span>
+                <span className="text-sm font-black text-[#e31a1a] uppercase text-nowrap">
+                  {MONTH_NAMES[selectedMonth]} {selectedYear}
+                </span>
+                <span className="text-[10px] font-bold text-slate-700 block font-mono">
+                  {periodType === '15_days' ? `(Série Quinzenal: ${selectedFortnight}ª Quinzena)` : '(Série Mensal Integrada)'}
+                </span>
+              </div>
+            </div>
+
+            {/* Quick KPI Summary Bar inside the Report */}
+            <div className="grid grid-cols-4 gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 mb-6 print:bg-transparent print:border-2 print:border-black">
+              <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Volume Total Concluído</span>
+                <span className="text-base font-black text-slate-900 font-mono">
+                  {totals.totalCompleted.toLocaleString('pt-BR')} <span className="text-[9px] font-sans font-extrabold text-slate-500">pacotes</span>
+                </span>
+              </div>
+              
+              <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Repasse Líquido Programado</span>
+                <span className="text-base font-black text-slate-900 font-mono">
+                  R$ {totals.totalPaidValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+
+              <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">SLA Médio do Período</span>
+                <span className="text-base font-black text-emerald-700 font-mono">
+                  {Math.round(courierPerformanceList.reduce((acc, curr) => acc + curr.efficiency, 0) / (courierPerformanceList.length || 1))}% SLA
+                </span>
+              </div>
+
+              <div className="text-center">
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Ocorrências / Pendências</span>
+                <span className="text-base font-black text-slate-900 font-mono">
+                  {totals.totalOccurrences} <span className="text-[10px] text-slate-400 font-bold">/</span> {totals.totalPendings} <span className="text-[9px] font-sans font-extrabold text-[#e31a1a]">incid.</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Charts Section: Designed to lay out perfectly side-by-side in landscape view */}
+            <div className={`grid gap-6 items-stretch print-grid flex-1 ${printLayout === 'both' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+              {/* Chart Column 1: Total volume completed per month */}
+              {(printLayout === 'both' || printLayout === 'chart1_only') && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between print:border-2 print:border-black">
+                  <div className="mb-2">
+                    <span className="text-[9px] font-black text-slate-450 uppercase tracking-wider block leading-none">Gráfico 1 • Comparação Mensal</span>
+                    <h3 className="text-xs font-bold text-slate-800 tracking-tight mt-0.5">
+                      Volume Total de Entregas por Mês
+                    </h3>
+                    <p className="text-[10px] text-slate-400">Total acumulado de pacotes entregues no mês (soma total de todos os cards)</p>
+                  </div>
+
+                  <div className="h-[260px] print-chart w-full my-auto">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chart1Data} margin={{ top: 25, right: 15, left: -15, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis 
+                          dataKey="name" 
+                          tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }} 
+                          axisLine={false} 
+                          tickLine={false} 
+                        />
+                        <YAxis 
+                          domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]}
+                          tickFormatter={(val: any) => val.toLocaleString('pt-BR')}
+                          tick={{ fill: '#64748b', fontSize: 9 }} 
+                          axisLine={false} 
+                          tickLine={false} 
+                        />
+                        <Tooltip 
+                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
+                          formatter={(value: any) => [`${value.toLocaleString('pt-BR')} pacotes`, 'Volume Total']}
+                        />
+                        <Bar 
+                          dataKey="Pacotes" 
+                          fill="#0f172a" 
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={printLayout === 'chart1_only' ? 68 : 36}
+                        >
+                          <LabelList 
+                            dataKey="Pacotes" 
+                            position="top" 
+                            formatter={(v: any) => v.toLocaleString('pt-BR')}
+                            style={{ fill: '#0a0a0c', fontSize: printLayout === 'chart1_only' ? 11 : 9, fontWeight: 900 }} 
+                          />
+                          {chart1Data.map((entry, index) => (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={index === selectedMonth ? '#e31a1a' : '#475569'} 
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Chart Column 2: Top 5 Best Couriers Ranking */}
+              {(printLayout === 'both' || printLayout === 'chart2_only') && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between print:border-2 print:border-black">
+                  <div className="mb-2">
+                    <span className="text-[9px] font-black text-slate-450 uppercase tracking-wider block leading-none">Gráfico 2 • Ranqueamento</span>
+                    <h3 className="text-xs font-bold text-slate-800 tracking-tight mt-0.5">
+                      Top 5 Melhores Entregadores (Posições de Destaque SLA)
+                    </h3>
+                    <p className="text-[10px] text-slate-400">Ganhadores do pódio classificados pelo SLA % do período selecionado</p>
+                  </div>
+
+                  <div className="h-[260px] print-chart w-full my-auto">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chart2Data} margin={{ top: 20, right: 10, left: -25, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis 
+                          dataKey="name" 
+                          tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }} 
+                          axisLine={false} 
+                          tickLine={false} 
+                        />
+                        <YAxis domain={[0, 110]} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} />
+                        <Tooltip 
+                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
+                          formatter={(value: any, name: any, propsOnChart: any) => [`SLA: ${value}%`, `${propsOnChart.payload.driver} (${propsOnChart.payload.entregas} ent.)`]}
+                        />
+                        <Bar 
+                          dataKey="SLA %" 
+                          radius={[4, 4, 0, 0]}
+                          maxBarSize={38}
+                        >
+                          <LabelList 
+                            dataKey="SLA %" 
+                            formatter={(val: any) => `${val}%`} 
+                            position="top" 
+                            style={{ fill: '#1e293b', fontSize: 10, fontWeight: 900 }} 
+                          />
+                          {chart2Data.map((entry, index) => {
+                            // Podium Colors: Gold, Silver, Bronze, and elegant defaults
+                            const colors = ['#d4af37', '#708090', '#b87333', '#1e293b', '#475569'];
+                            return (
+                              <Cell 
+                                key={`cell-${index}`} 
+                                fill={colors[index] || '#475569'} 
+                              />
+                            );
+                          })}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Print Signatures and Audit trail (for physical/PDF documents) */}
+            <div className="grid grid-cols-2 gap-12 mt-6 pt-6 border-t border-dashed border-slate-350">
+              <div className="text-center">
+                <div className="h-px bg-slate-400 mx-auto w-48 mb-1" />
+                <p className="text-[10px] font-black text-slate-700 uppercase">Conferido por (Auditoria e Controle)</p>
+                <p className="text-[8px] text-slate-400">Data: ____/____/________</p>
+              </div>
+
+              <div className="text-center">
+                <div className="h-px bg-slate-400 mx-auto w-48 mb-1" />
+                <p className="text-[10px] font-black text-slate-700 uppercase">Aprovação (Diretoria Regional)</p>
+                <p className="text-[8px] text-slate-400">Assinatura autorizada eletronicamente</p>
+              </div>
+            </div>
+
+            {/* Document Footnote Metadata */}
+            <div className="flex justify-between items-center mt-4 text-[8px] text-slate-400 border-t border-slate-100 pt-2 print:text-black">
+              <span>Auditoria Jadlog • Emissão: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')} (UTC-3)</span>
+              <span>Jadlog S.A. © Todos os direitos reservados. Relatório Operacional Interno Conclaves de Ranqueamento.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Premium Dashboard Header & Dynamic Periode Selectors */}
@@ -468,10 +939,21 @@ export default function ManagerialDashboard({
             <Sparkles className="w-4 h-4 text-orange-500 shrink-0" />
             <span>Métricas Gerenciais Operacionais</span>
           </div>
-          <h2 className="text-xl font-black text-slate-900 mt-1">
-            Painel Executivo de Desempenho
-          </h2>
-          <p className="text-xs text-slate-500 mt-0.5 max-w-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-1.5">
+            <h2 className="text-xl font-black text-slate-900 leading-none">
+              Painel Executivo de Desempenho
+            </h2>
+            <button
+              id="btn-open-presentation-view"
+              onClick={() => setActiveSubView('pdf_presentation')}
+              className="text-white bg-slate-900 hover:bg-slate-800 font-sans font-black text-[10px] uppercase tracking-wider px-3.5 py-1.5 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 border border-slate-850 shadow-sm self-start"
+              title="Visualizar gráficos formatados em folha paisagem A4 para geração de PDF de apresentação"
+            >
+              <Printer className="w-3.5 h-3.5 text-orange-500 shrink-0 animate-pulse" />
+              <span>Gráficos e Apresentação A4</span>
+            </button>
+          </div>
+          <p className="text-xs text-slate-500 mt-1 max-w-xl">
             Revise o acumulado de entregas, faturamento, custos com descontos, e ranqueamento de conformidade dos 15 entregadores.
           </p>
         </div>
@@ -735,20 +1217,67 @@ export default function ManagerialDashboard({
         </div>
 
         {/* Dynamic Leaderboard Ranking of couriers */}
-        <div className="xl:col-span-5 bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex flex-col">
-          <div className="mb-4 flex justify-between items-start">
+        <div className="xl:col-span-12 lg:col-span-12 xl:order-last bg-white border border-slate-200 rounded-3xl p-5 shadow-xs flex flex-col">
+          <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
             <div>
-              <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest block">Conformidade Operacional</span>
-              <h4 className="text-sm font-bold text-slate-850 mt-0.5">
-                Ranking de Melhores do Período
+              <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest block">Metodologia de Desempenho e Premiação</span>
+              <h4 className="text-sm font-bold text-slate-850 mt-0.5 flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-orange-500 shrink-0" /> Ranking de Melhores do Período
               </h4>
-              <p className="text-[11px] text-slate-400">Classificados por SLA Proporcional (Penas: Ocorrência -5%, Pendência -2%, Multa -0,20% por R$)</p>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {rankingModel === 'logistics_fair' 
+                  ? "Ativo: Cálculo Proporcional (Trata ocorrências/multas em relação ao volume de entregas e payout)" 
+                  : "Ativo: Cálculo Absoluto Clássico (Deduções fixas por ocorrência, independente do volume)"}
+              </p>
             </div>
-            <Award className="w-6 h-6 text-orange-500 shrink-0" />
+            
+            {/* Interactive Model Switcher */}
+            <div className="flex bg-slate-100 p-1 rounded-xl self-start md:self-auto shrink-0 border border-slate-200">
+              <button
+                onClick={() => handleToggleRankingModel('logistics_fair')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 ${rankingModel === 'logistics_fair' ? 'bg-[#e31a1a] text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                <Sparkles className="w-3 h-3" />
+                Diferencial Logístico (Justo)
+              </button>
+              <button
+                onClick={() => handleToggleRankingModel('standard')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all cursor-pointer flex items-center gap-1 ${rankingModel === 'standard' ? 'bg-slate-700 text-white shadow-md' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                Padrão Absoluto
+              </button>
+            </div>
           </div>
 
+          {/* Educational Callout explaining the difference */}
+          {rankingModel === 'logistics_fair' ? (
+            <div className="mb-4 bg-emerald-50 border border-emerald-150 rounded-2xl p-4 text-[11px] text-emerald-950 leading-relaxed shadow-2xs">
+              <span className="font-extrabold flex items-center gap-1 text-emerald-800 mb-1">
+                <Sparkles className="w-4 h-4" /> COMO FUNCIONA O CÁLCULO LOGÍSTICO JUSTO (VOLUME-WEIGHTED):
+              </span>
+              Este modelo calcula a sua pontuação com base em <strong>taxas de eficiência percentuais</strong> em relação ao total de trabalho executado, corrigindo o efeito de volume:
+              <ul className="list-disc list-inside mt-1.5 space-y-1 font-medium text-emerald-900 ml-1">
+                <li><strong>Ocorrências Proporcionais:</strong> Mede o erro como frequência. Ter 3 ocorrências em 1.500 entregas (taxa de 0,2%) penaliza o SLA em apenas <strong className="font-mono font-bold">-2%</strong>. Ter as mesmas 3 ocorrências em 50 entregas (taxa de 6%) penaliza pesadamente em <strong className="font-mono font-bold">-60%</strong>.</li>
+                <li><strong>Pendências Corrigidas:</strong> O peso é medido sobre a taxa de pacotes pendentes em relação ao volume expedido.</li>
+                <li><strong>Sinistralidade Financeira (Multas):</strong> Mede o impacto das multas ou perdas contra a própria receita bruta do entregador (taxa de perda sobre payout), protegendo as rotas de alta quilometragem e volume.</li>
+              </ul>
+            </div>
+          ) : (
+            <div className="mb-4 bg-slate-50 border border-slate-200 rounded-2xl p-4 text-[11px] text-slate-700 leading-relaxed">
+              <span className="font-bold flex items-center gap-1 text-slate-800 mb-1">
+                ⚠️ MODELO CLÁSSICO DE DEDUÇÃO FIXA:
+              </span>
+              Neste modelo legado, cada incidente reduz uma porcentagem fixa do SLA, punindo severamente quem trabalha mais e faz mais volumes:
+              <ul className="list-disc list-inside mt-1.5 space-y-1 text-slate-600 ml-1">
+                <li>Cada <strong className="text-slate-800">Ocorrência</strong> de caneta subtrai de forma estática <strong className="text-rose-600 font-bold">-5%</strong> do SLA.</li>
+                <li>Cada <strong className="text-slate-800">Pendência</strong> subtrai <strong className="text-rose-600 font-bold">-2%</strong>.</li>
+                <li>Cada <strong className="text-slate-800">R$ 1,00 de multa / desconto</strong> reduz <strong className="text-rose-600 font-bold">-0.2%</strong> do SLA.</li>
+              </ul>
+            </div>
+          )}
+
           {/* Ranking List */}
-          <div className="space-y-2 max-h-[310px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 max-h-[480px] overflow-y-auto pr-1">
             {courierRanking.map((item, index) => {
               const standsOut = index < 3;
               // Badge style for top 3
