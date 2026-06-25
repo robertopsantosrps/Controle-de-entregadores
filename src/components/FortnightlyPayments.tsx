@@ -1469,7 +1469,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                       </span>
                       {report.phone ? (
                         <a 
-                          href={`https://api.whatsapp.com/send?phone=${cleanPhoneForWhatsapp(report.phone)}`}
+                          href={`https://wa.me/${cleanPhoneForWhatsapp(report.phone)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-bold text-orange-650 hover:underline flex items-center gap-0.5 print:text-slate-700"
@@ -2303,8 +2303,8 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
         const encodedMsg = encodeURIComponent(msgText);
         const cleanedPhone = cleanPhoneForWhatsapp(shareModalReport.phone);
         const waLink = cleanedPhone 
-          ? `https://api.whatsapp.com/send?phone=${cleanedPhone}`
-          : `https://api.whatsapp.com/send`;
+          ? `https://wa.me/${cleanedPhone}`
+          : `https://wa.me`;
           
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs print:hidden animate-in fade-in duration-200">
@@ -2489,33 +2489,28 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                       </button>
 
                       {/* Button 2: Copy image & open WhatsApp */}
-                      <button
-                        onClick={async () => {
-                          if (!cardImageSrc) return;
+                      <a
+                        href={waLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={async (e) => {
+                          if (!cardImageSrc) {
+                            e.preventDefault();
+                            return;
+                          }
                           const copied = await copyImageToClipboard(cardImageSrc);
                           if (copied) {
                             setCopiedImage(true);
                             setTimeout(() => setCopiedImage(false), 3000);
-                            
-                            // Download as backup automatically
-                            const link = document.createElement('a');
-                            link.download = `Card_${shareModalReport.driverId}_Quinzena_${selectedFortnight}.png`;
-                            link.href = cardImageSrc;
-                            link.click();
-
-                            // Open WhatsApp chat in a new tab immediately
-                            window.open(waLink, '_blank');
-                          } else {
-                            // Fallback download if clipboard fails
-                            const link = document.createElement('a');
-                            link.download = `Card_${shareModalReport.driverId}_Quinzena_${selectedFortnight}.png`;
-                            link.href = cardImageSrc;
-                            link.click();
-                            window.open(waLink, '_blank');
                           }
+                          
+                          // Download as backup automatically
+                          const link = document.createElement('a');
+                          link.download = `Card_${shareModalReport.driverId}_Quinzena_${selectedFortnight}.png`;
+                          link.href = cardImageSrc;
+                          link.click();
                         }}
-                        disabled={!cardImageSrc || isGeneratingImage}
-                        className={`flex-2 px-4 py-2.5 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all text-center cursor-pointer shadow-sm ${!cardImageSrc ? 'bg-slate-300 cursor-not-allowed' : 'bg-[#25D366] hover:bg-[#20ba5a] active:scale-98'}`}
+                        className={`flex-2 px-4 py-2.5 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all text-center cursor-pointer shadow-sm no-underline ${!cardImageSrc ? 'bg-slate-300 pointer-events-none cursor-not-allowed' : 'bg-[#25D366] hover:bg-[#20ba5a] active:scale-98'}`}
                       >
                         {copiedImage ? (
                           <>
@@ -2528,7 +2523,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                             <span>Copiar Imagem e WhatsApp</span>
                           </>
                         )}
-                      </button>
+                      </a>
                     </>
                   ) : (
                     <>
@@ -2556,7 +2551,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
 
                       {/* Button 2: Send WhatsApp Link directly with text pre-filled */}
                       <a
-                        href={`https://api.whatsapp.com/send?phone=${cleanedPhone}&text=${encodedMsg}`}
+                        href={cleanedPhone ? `https://wa.me/${cleanedPhone}?text=${encodedMsg}` : `https://wa.me?text=${encodedMsg}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex-1 px-4 py-2.5 bg-[#25D366] hover:bg-[#20ba5a] text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all text-center no-underline cursor-pointer shadow-sm hover:shadow active:scale-98"

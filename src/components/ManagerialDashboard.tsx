@@ -149,7 +149,7 @@ export default function ManagerialDashboard({
 
   // State for active view (dashboard overview vs pdf_presentation landscape report)
   const [activeSubView, setActiveSubView] = useState<'dashboard' | 'pdf_presentation'>('dashboard');
-  const [printLayout, setPrintLayout] = useState<'both' | 'chart1_only' | 'chart2_only'>('both');
+  const [printLayout, setPrintLayout] = useState<'both' | 'separated' | 'chart1_only' | 'chart2_only'>('separated');
   const [isInIframe, setIsInIframe] = useState(false);
   useEffect(() => {
     try {
@@ -558,6 +558,210 @@ export default function ManagerialDashboard({
   }, [courierPerformanceList]);
 
   if (activeSubView === 'pdf_presentation') {
+    const renderPageContent = (layoutMode: 'both' | 'chart1_only' | 'chart2_only') => {
+      return (
+        <>
+          {/* Header section (strictly elegant) */}
+          <div className="border-b-[3px] border-black pb-4 mb-4 flex justify-between items-end">
+            <div className="flex items-center gap-3">
+              <div className="bg-black text-white px-3 py-1.5 font-sans font-black text-base flex items-center tracking-tight leading-none">
+                <span>JAD</span>
+                <span className="text-[#e31a1a]">LOG</span>
+              </div>
+              <div>
+                <h1 className="text-base font-black text-slate-900 tracking-tight uppercase leading-snug">
+                  RELATÓRIO EXECUTIVO — DESEMPENHO OPERACIONAL
+                </h1>
+                <p className="text-[10px] text-slate-500 font-extrabold tracking-normal uppercase leading-none">
+                  Análise e Auditoria Consolidada de Distribuição Secundária • Redes Parceiras
+                </p>
+              </div>
+            </div>
+
+            <div className="text-right">
+              <span className="text-[9px] font-black text-slate-400 block uppercase tracking-wider">Período de Referência</span>
+              <span className="text-sm font-black text-[#e31a1a] uppercase text-nowrap">
+                {MONTH_NAMES[selectedMonth]} {selectedYear}
+              </span>
+              <span className="text-[10px] font-bold text-slate-700 block font-mono">
+                {periodType === '15_days' ? `(Série Quinzenal: ${selectedFortnight}ª Quinzena)` : '(Série Mensal Integrada)'}
+              </span>
+            </div>
+          </div>
+
+          {/* Quick KPI Summary Bar inside the Report */}
+          <div className="grid grid-cols-4 gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 mb-6 print:bg-transparent print:border-2 print:border-black">
+            <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Volume Total Concluído</span>
+              <span className="text-base font-black text-slate-900 font-mono">
+                {totals.totalCompleted.toLocaleString('pt-BR')} <span className="text-[9px] font-sans font-extrabold text-slate-500">pacotes</span>
+              </span>
+            </div>
+            
+            <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Repasse Líquido Programado</span>
+              <span className="text-base font-black text-slate-900 font-mono">
+                R$ {totals.totalPaidValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">SLA Médio do Período</span>
+              <span className="text-base font-black text-emerald-700 font-mono">
+                {Math.round(courierPerformanceList.reduce((acc, curr) => acc + curr.efficiency, 0) / (courierPerformanceList.length || 1))}% SLA
+              </span>
+            </div>
+
+            <div className="text-center">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Ocorrências / Pendências</span>
+              <span className="text-base font-black text-slate-900 font-mono">
+                {totals.totalOccurrences} <span className="text-[10px] text-slate-400 font-bold">/</span> {totals.totalPendings} <span className="text-[9px] font-sans font-extrabold text-[#e31a1a]">incid.</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Charts Section: Designed to lay out perfectly side-by-side in landscape view */}
+          <div className={`grid gap-6 items-stretch print-grid flex-1 ${layoutMode === 'both' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
+            {/* Chart Column 1: Total volume completed per month */}
+            {(layoutMode === 'both' || layoutMode === 'chart1_only') && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between print:border-2 print:border-black">
+                <div className="mb-2">
+                  <span className="text-[9px] font-black text-slate-450 uppercase tracking-wider block leading-none">Gráfico 1 • Comparação Mensal</span>
+                  <h3 className="text-xs font-bold text-slate-800 tracking-tight mt-0.5">
+                    Volume Total de Entregas por Mês
+                  </h3>
+                  <p className="text-[10px] text-slate-400">Total acumulado de pacotes entregues no mês (soma total de todos os cards)</p>
+                </div>
+
+                <div className="h-[260px] print-chart w-full my-auto">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chart1Data} margin={{ top: 25, right: 15, left: -15, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }} 
+                        axisLine={false} 
+                        tickLine={false} 
+                      />
+                      <YAxis 
+                        domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]}
+                        tickFormatter={(val: any) => val.toLocaleString('pt-BR')}
+                        tick={{ fill: '#64748b', fontSize: 9 }} 
+                        axisLine={false} 
+                        tickLine={false} 
+                      />
+                      <Tooltip 
+                        contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
+                        formatter={(value: any) => [`${value.toLocaleString('pt-BR')} pacotes`, 'Volume Total']}
+                      />
+                      <Bar 
+                        dataKey="Pacotes" 
+                        fill="#0f172a" 
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={layoutMode === 'chart1_only' ? 68 : 36}
+                        isAnimationActive={false}
+                      >
+                        <LabelList 
+                          dataKey="Pacotes" 
+                          position="top" 
+                          formatter={(v: any) => v.toLocaleString('pt-BR')}
+                          fill="#000000"
+                          style={{ fill: '#0a0a0c', fontSize: layoutMode === 'chart1_only' ? 11 : 9, fontWeight: 900 }} 
+                        />
+                        {chart1Data.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={index === selectedMonth ? '#e31a1a' : '#475569'} 
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
+            {/* Chart Column 2: Top 5 Best Couriers Ranking */}
+            {(layoutMode === 'both' || layoutMode === 'chart2_only') && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between print:border-2 print:border-black">
+                <div className="mb-2">
+                  <span className="text-[9px] font-black text-slate-450 uppercase tracking-wider block leading-none">Gráfico 2 • Ranqueamento</span>
+                  <h3 className="text-xs font-bold text-slate-800 tracking-tight mt-0.5">
+                    Top 5 Melhores Entregadores (Posições de Destaque SLA)
+                  </h3>
+                  <p className="text-[10px] text-slate-400">Ganhadores do pódio classificados pelo SLA % do período selecionado</p>
+                </div>
+
+                <div className="h-[260px] print-chart w-full my-auto">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chart2Data} margin={{ top: 20, right: 10, left: -25, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }} 
+                        axisLine={false} 
+                        tickLine={false} 
+                      />
+                      <YAxis domain={[0, 110]} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} />
+                      <Tooltip 
+                        contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
+                        formatter={(value: any, name: any, propsOnChart: any) => [`SLA: ${value}%`, `${propsOnChart.payload.driver} (${propsOnChart.payload.entregas} ent.)`]}
+                      />
+                      <Bar 
+                        dataKey="SLA %" 
+                        radius={[4, 4, 0, 0]}
+                        maxBarSize={layoutMode === 'chart2_only' ? 68 : 38}
+                        isAnimationActive={false}
+                      >
+                        <LabelList 
+                          dataKey="SLA %" 
+                          formatter={(val: any) => `${val}%`} 
+                          position="top" 
+                          fill="#000000"
+                          style={{ fill: '#1e293b', fontSize: layoutMode === 'chart2_only' ? 11 : 10, fontWeight: 900 }} 
+                        />
+                        {chart2Data.map((entry, index) => {
+                          // Podium Colors: Gold, Silver, Bronze, and elegant defaults
+                          const colors = ['#d4af37', '#708090', '#b87333', '#1e293b', '#475569'];
+                          return (
+                            <Cell 
+                              key={`cell-${index}`} 
+                              fill={colors[index] || '#475569'} 
+                            />
+                          );
+                        })}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Print Signatures and Audit trail (for physical/PDF documents) */}
+          <div className="grid grid-cols-2 gap-12 mt-6 pt-6 border-t border-dashed border-slate-350">
+            <div className="text-center">
+              <div className="h-px bg-slate-400 mx-auto w-48 mb-1" />
+              <p className="text-[10px] font-black text-slate-700 uppercase">Conferido por (Auditoria e Controle)</p>
+              <p className="text-[8px] text-slate-400">Data: ____/____/________</p>
+            </div>
+
+            <div className="text-center">
+              <div className="h-px bg-slate-400 mx-auto w-48 mb-1" />
+              <p className="text-[10px] font-black text-slate-700 uppercase">Aprovação (Diretoria Regional)</p>
+              <p className="text-[8px] text-slate-400">Assinatura autorizada eletronicamente</p>
+            </div>
+          </div>
+
+          {/* Document Footnote Metadata */}
+          <div className="flex justify-between items-center mt-4 text-[8px] text-slate-400 border-t border-slate-100 pt-2 print:text-black">
+            <span>Auditoria Jadlog • Emissão: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')} (UTC-3)</span>
+            <span>Jadlog S.A. © Todos os direitos reservados. Relatório Operacional Interno Conclaves de Ranqueamento.</span>
+          </div>
+        </>
+      );
+    };
+
     return (
       <div className="space-y-6 font-sans">
         {/* Custom landscape print CSS rule injected directly. Guaranteed encapsulation! */}
@@ -568,16 +772,15 @@ export default function ManagerialDashboard({
               visibility: hidden !important;
             }
             /* Show ONLY our printed presentation mock and its children */
-            #a4-presentation-container, #a4-presentation-container * {
+            #a4-presentation-container, #a4-presentation-container *,
+            .print-page, .print-page * {
               visibility: visible !important;
               color: #000000 !important;
             }
-            #a4-presentation-container {
-              position: absolute !important;
-              left: 0 !important;
-              top: 0 !important;
+            #a4-presentation-container, .print-page {
+              position: relative !important;
               width: 297mm !important;
-              height: 210mm !important;
+              height: 200mm !important;
               max-width: 100% !important;
               max-height: 100% !important;
               margin: 0 !important;
@@ -585,6 +788,16 @@ export default function ManagerialDashboard({
               border: none !important;
               box-shadow: none !important;
               background: #ffffff !important;
+              box-sizing: border-box !important;
+              page-break-after: always !important;
+              break-after: page !important;
+              display: flex !important;
+              flex-direction: column !important;
+              justify-content: space-between !important;
+            }
+            .print-page:last-child {
+              page-break-after: avoid !important;
+              break-after: avoid !important;
             }
             .print\\:hidden {
               display: none !important;
@@ -681,9 +894,10 @@ export default function ManagerialDashboard({
             <div className="flex items-center gap-1">
               <select
                 value={printLayout}
-                onChange={(e) => setPrintLayout(e.target.value as 'both' | 'chart1_only' | 'chart2_only')}
+                onChange={(e) => setPrintLayout(e.target.value as 'both' | 'separated' | 'chart1_only' | 'chart2_only')}
                 className="text-xs font-black text-slate-800 bg-amber-55 border border-amber-200 hover:bg-amber-100/80 rounded-lg px-2.5 py-1.5 outline-orange-500 cursor-pointer"
               >
+                <option value="separated">Ambos (Um por Página)</option>
                 <option value="both">Ambos (Lado a Lado)</option>
                 <option value="chart1_only">Apenas Gráfico 1 (Histórico de Volumes)</option>
                 <option value="chart2_only">Apenas Gráfico 2 (Top 5 SLA)</option>
@@ -727,204 +941,30 @@ export default function ManagerialDashboard({
 
         {/* Widescreen simulation of an A4 horizontal page (A4 layout matches 1.414 standard aspect ratio) */}
         <div className="flex justify-center bg-slate-100/50 p-1 md:p-4 rounded-3xl border border-slate-200/50 print:bg-white print:border-none print:p-0">
-          <div 
-            id="a4-presentation-container" 
-            className="bg-white border-2 border-black shadow-xl rounded-2xl p-6 md:p-8 w-full max-w-[297mm] min-h-[210mm] flex flex-col justify-between print:border-none print:shadow-none print:p-0 print:m-0"
-          >
-            {/* Header section (strictly elegant) */}
-            <div className="border-b-[3px] border-black pb-4 mb-4 flex justify-between items-end">
-              <div className="flex items-center gap-3">
-                <div className="bg-black text-white px-3 py-1.5 font-sans font-black text-base flex items-center tracking-tight leading-none">
-                  <span>JAD</span>
-                  <span className="text-[#e31a1a]">LOG</span>
-                </div>
-                <div>
-                  <h1 className="text-base font-black text-slate-900 tracking-tight uppercase leading-snug">
-                    RELATÓRIO EXECUTIVO — DESEMPENHO OPERACIONAL
-                  </h1>
-                  <p className="text-[10px] text-slate-500 font-extrabold tracking-normal uppercase leading-none">
-                    Análise e Auditoria Consolidada de Distribuição Secundária • Redes Parceiras
-                  </p>
-                </div>
+          {printLayout === 'separated' ? (
+            <div className="flex flex-col gap-8 w-full max-w-[297mm] print:gap-0 print:block">
+              {/* Page 1 (Chart 1 only) */}
+              <div 
+                id="a4-presentation-container"
+                className="print-page bg-white border-2 border-black shadow-xl rounded-2xl p-6 md:p-8 min-h-[210mm] flex flex-col justify-between print:border-none print:shadow-none print:p-0 print:m-0"
+              >
+                {renderPageContent('chart1_only')}
               </div>
-
-              <div className="text-right">
-                <span className="text-[9px] font-black text-slate-400 block uppercase tracking-wider">Período de Referência</span>
-                <span className="text-sm font-black text-[#e31a1a] uppercase text-nowrap">
-                  {MONTH_NAMES[selectedMonth]} {selectedYear}
-                </span>
-                <span className="text-[10px] font-bold text-slate-700 block font-mono">
-                  {periodType === '15_days' ? `(Série Quinzenal: ${selectedFortnight}ª Quinzena)` : '(Série Mensal Integrada)'}
-                </span>
+              {/* Page 2 (Chart 2 only) */}
+              <div 
+                className="print-page bg-white border-2 border-black shadow-xl rounded-2xl p-6 md:p-8 min-h-[210mm] flex flex-col justify-between print:border-none print:shadow-none print:p-0 print:m-0 print-page-break-before"
+              >
+                {renderPageContent('chart2_only')}
               </div>
             </div>
-
-            {/* Quick KPI Summary Bar inside the Report */}
-            <div className="grid grid-cols-4 gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 mb-6 print:bg-transparent print:border-2 print:border-black">
-              <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Volume Total Concluído</span>
-                <span className="text-base font-black text-slate-900 font-mono">
-                  {totals.totalCompleted.toLocaleString('pt-BR')} <span className="text-[9px] font-sans font-extrabold text-slate-500">pacotes</span>
-                </span>
-              </div>
-              
-              <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Repasse Líquido Programado</span>
-                <span className="text-base font-black text-slate-900 font-mono">
-                  R$ {totals.totalPaidValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </span>
-              </div>
-
-              <div className="text-center border-r border-slate-200 last:border-0 print:border-black">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">SLA Médio do Período</span>
-                <span className="text-base font-black text-emerald-700 font-mono">
-                  {Math.round(courierPerformanceList.reduce((acc, curr) => acc + curr.efficiency, 0) / (courierPerformanceList.length || 1))}% SLA
-                </span>
-              </div>
-
-              <div className="text-center">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">Ocorrências / Pendências</span>
-                <span className="text-base font-black text-slate-900 font-mono">
-                  {totals.totalOccurrences} <span className="text-[10px] text-slate-400 font-bold">/</span> {totals.totalPendings} <span className="text-[9px] font-sans font-extrabold text-[#e31a1a]">incid.</span>
-                </span>
-              </div>
+          ) : (
+            <div 
+              id="a4-presentation-container" 
+              className="print-page bg-white border-2 border-black shadow-xl rounded-2xl p-6 md:p-8 w-full max-w-[297mm] min-h-[210mm] flex flex-col justify-between print:border-none print:shadow-none print:p-0 print:m-0"
+            >
+              {renderPageContent(printLayout as 'both' | 'chart1_only' | 'chart2_only')}
             </div>
-
-            {/* Charts Section: Designed to lay out perfectly side-by-side in landscape view */}
-            <div className={`grid gap-6 items-stretch print-grid flex-1 ${printLayout === 'both' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1'}`}>
-              {/* Chart Column 1: Total volume completed per month */}
-              {(printLayout === 'both' || printLayout === 'chart1_only') && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between print:border-2 print:border-black">
-                  <div className="mb-2">
-                    <span className="text-[9px] font-black text-slate-450 uppercase tracking-wider block leading-none">Gráfico 1 • Comparação Mensal</span>
-                    <h3 className="text-xs font-bold text-slate-800 tracking-tight mt-0.5">
-                      Volume Total de Entregas por Mês
-                    </h3>
-                    <p className="text-[10px] text-slate-400">Total acumulado de pacotes entregues no mês (soma total de todos os cards)</p>
-                  </div>
-
-                  <div className="h-[260px] print-chart w-full my-auto">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chart1Data} margin={{ top: 25, right: 15, left: -15, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis 
-                          dataKey="name" 
-                          tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }} 
-                          axisLine={false} 
-                          tickLine={false} 
-                        />
-                        <YAxis 
-                          domain={[0, (dataMax: number) => Math.ceil(dataMax * 1.15)]}
-                          tickFormatter={(val: any) => val.toLocaleString('pt-BR')}
-                          tick={{ fill: '#64748b', fontSize: 9 }} 
-                          axisLine={false} 
-                          tickLine={false} 
-                        />
-                        <Tooltip 
-                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
-                          formatter={(value: any) => [`${value.toLocaleString('pt-BR')} pacotes`, 'Volume Total']}
-                        />
-                        <Bar 
-                          dataKey="Pacotes" 
-                          fill="#0f172a" 
-                          radius={[4, 4, 0, 0]}
-                          maxBarSize={printLayout === 'chart1_only' ? 68 : 36}
-                        >
-                          <LabelList 
-                            dataKey="Pacotes" 
-                            position="top" 
-                            formatter={(v: any) => v.toLocaleString('pt-BR')}
-                            style={{ fill: '#0a0a0c', fontSize: printLayout === 'chart1_only' ? 11 : 9, fontWeight: 900 }} 
-                          />
-                          {chart1Data.map((entry, index) => (
-                            <Cell 
-                              key={`cell-${index}`} 
-                              fill={index === selectedMonth ? '#e31a1a' : '#475569'} 
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {/* Chart Column 2: Top 5 Best Couriers Ranking */}
-              {(printLayout === 'both' || printLayout === 'chart2_only') && (
-                <div className="bg-white border border-slate-200 rounded-2xl p-4 flex flex-col justify-between print:border-2 print:border-black">
-                  <div className="mb-2">
-                    <span className="text-[9px] font-black text-slate-450 uppercase tracking-wider block leading-none">Gráfico 2 • Ranqueamento</span>
-                    <h3 className="text-xs font-bold text-slate-800 tracking-tight mt-0.5">
-                      Top 5 Melhores Entregadores (Posições de Destaque SLA)
-                    </h3>
-                    <p className="text-[10px] text-slate-400">Ganhadores do pódio classificados pelo SLA % do período selecionado</p>
-                  </div>
-
-                  <div className="h-[260px] print-chart w-full my-auto">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={chart2Data} margin={{ top: 20, right: 10, left: -25, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                        <XAxis 
-                          dataKey="name" 
-                          tick={{ fill: '#475569', fontSize: 9, fontWeight: 800 }} 
-                          axisLine={false} 
-                          tickLine={false} 
-                        />
-                        <YAxis domain={[0, 110]} tick={{ fill: '#64748b', fontSize: 9 }} axisLine={false} tickLine={false} />
-                        <Tooltip 
-                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '10px' }}
-                          formatter={(value: any, name: any, propsOnChart: any) => [`SLA: ${value}%`, `${propsOnChart.payload.driver} (${propsOnChart.payload.entregas} ent.)`]}
-                        />
-                        <Bar 
-                          dataKey="SLA %" 
-                          radius={[4, 4, 0, 0]}
-                          maxBarSize={38}
-                        >
-                          <LabelList 
-                            dataKey="SLA %" 
-                            formatter={(val: any) => `${val}%`} 
-                            position="top" 
-                            style={{ fill: '#1e293b', fontSize: 10, fontWeight: 900 }} 
-                          />
-                          {chart2Data.map((entry, index) => {
-                            // Podium Colors: Gold, Silver, Bronze, and elegant defaults
-                            const colors = ['#d4af37', '#708090', '#b87333', '#1e293b', '#475569'];
-                            return (
-                              <Cell 
-                                key={`cell-${index}`} 
-                                fill={colors[index] || '#475569'} 
-                              />
-                            );
-                          })}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Print Signatures and Audit trail (for physical/PDF documents) */}
-            <div className="grid grid-cols-2 gap-12 mt-6 pt-6 border-t border-dashed border-slate-350">
-              <div className="text-center">
-                <div className="h-px bg-slate-400 mx-auto w-48 mb-1" />
-                <p className="text-[10px] font-black text-slate-700 uppercase">Conferido por (Auditoria e Controle)</p>
-                <p className="text-[8px] text-slate-400">Data: ____/____/________</p>
-              </div>
-
-              <div className="text-center">
-                <div className="h-px bg-slate-400 mx-auto w-48 mb-1" />
-                <p className="text-[10px] font-black text-slate-700 uppercase">Aprovação (Diretoria Regional)</p>
-                <p className="text-[8px] text-slate-400">Assinatura autorizada eletronicamente</p>
-              </div>
-            </div>
-
-            {/* Document Footnote Metadata */}
-            <div className="flex justify-between items-center mt-4 text-[8px] text-slate-400 border-t border-slate-100 pt-2 print:text-black">
-              <span>Auditoria Jadlog • Emissão: {new Date().toLocaleDateString('pt-BR')} às {new Date().toLocaleTimeString('pt-BR')} (UTC-3)</span>
-              <span>Jadlog S.A. © Todos os direitos reservados. Relatório Operacional Interno Conclaves de Ranqueamento.</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     );
