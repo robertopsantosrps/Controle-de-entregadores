@@ -334,6 +334,7 @@ export default function FortnightlyPayments({
   const [imageError, setImageError] = useState<string | null>(null);
   const [activeShareMode, setActiveShareMode] = useState<'image' | 'text'>('image');
   const [copiedImage, setCopiedImage] = useState(false);
+  const [showWaCopyAlert, setShowWaCopyAlert] = useState(false);
 
   const renderImageFromElement = async (el: HTMLElement, driverId: string, downloadOnCompletion: boolean) => {
     setIsGeneratingImage(true);
@@ -2307,7 +2308,8 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
           : `https://wa.me`;
           
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs print:hidden animate-in fade-in duration-200">
+          <>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs print:hidden animate-in fade-in duration-200">
             <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in duration-150">
               {/* Header */}
               <div className="bg-emerald-600 text-white p-5 flex justify-between items-center shrink-0">
@@ -2489,15 +2491,9 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                       </button>
 
                       {/* Button 2: Copy image & open WhatsApp */}
-                      <a
-                        href={waLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={async (e) => {
-                          if (!cardImageSrc) {
-                            e.preventDefault();
-                            return;
-                          }
+                      <button
+                        onClick={async () => {
+                          if (!cardImageSrc) return;
                           const copied = await copyImageToClipboard(cardImageSrc);
                           if (copied) {
                             setCopiedImage(true);
@@ -2509,13 +2505,17 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                           link.download = `Card_${shareModalReport.driverId}_Quinzena_${selectedFortnight}.png`;
                           link.href = cardImageSrc;
                           link.click();
+
+                          // Open instruction modal
+                          setShowWaCopyAlert(true);
                         }}
-                        className={`flex-2 px-4 py-2.5 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all text-center cursor-pointer shadow-sm no-underline ${!cardImageSrc ? 'bg-slate-300 pointer-events-none cursor-not-allowed' : 'bg-[#25D366] hover:bg-[#20ba5a] active:scale-98'}`}
+                        disabled={!cardImageSrc}
+                        className={`flex-2 px-4 py-2.5 text-white rounded-xl font-black text-xs flex items-center justify-center gap-1.5 transition-all text-center cursor-pointer shadow-sm ${!cardImageSrc ? 'bg-slate-300 pointer-events-none cursor-not-allowed' : 'bg-[#25D366] hover:bg-[#20ba5a] active:scale-98'}`}
                       >
                         {copiedImage ? (
                           <>
                             <Check className="w-4 h-4" />
-                            <span>¡Card Copiado! Aberto Whats</span>
+                            <span>¡Card Copiado! Ver Instruções</span>
                           </>
                         ) : (
                           <>
@@ -2523,7 +2523,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                             <span>Copiar Imagem e WhatsApp</span>
                           </>
                         )}
-                      </a>
+                      </button>
                     </>
                   ) : (
                     <>
@@ -2565,6 +2565,66 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
               </div>
             </div>
           </div>
+
+            {/* ELEGANT OVERLAY FOR WHATSAPP INSTRUCTIONS */}
+            {showWaCopyAlert && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in duration-200 font-sans">
+                <div className="bg-white rounded-3xl shadow-2xl border border-slate-150 p-6 max-w-md w-full space-y-4 animate-in zoom-in-95 duration-200">
+                  <div className="flex items-center gap-3 text-[#25D366]">
+                    <div className="p-3 bg-emerald-50 rounded-full">
+                      <Share2 className="w-8 h-8" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-black text-slate-900 tracking-tight">Instruções de Envio do Card</h3>
+                      <p className="text-xs font-bold text-slate-500">Como enviar a imagem pelo WhatsApp</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-2xl space-y-3 text-xs text-emerald-950 leading-relaxed font-medium">
+                    <p className="font-extrabold text-emerald-900 text-sm">
+                      💡 Importante: O WhatsApp não permite carregar imagens automaticamente via link externo.
+                    </p>
+                    
+                    <div className="space-y-2 text-slate-700">
+                      <div className="flex gap-2 items-start">
+                        <span className="bg-[#25D366] text-white rounded-full w-5 h-5 flex items-center justify-center font-extrabold text-[10px] shrink-0 mt-0.5">1</span>
+                        <p>A imagem do card já foi <strong className="text-emerald-900 font-extrabold">COPIADA para sua Área de Transferência</strong>.</p>
+                      </div>
+                      <div className="flex gap-2 items-start">
+                        <span className="bg-[#25D366] text-white rounded-full w-5 h-5 flex items-center justify-center font-extrabold text-[10px] shrink-0 mt-0.5">2</span>
+                        <p>Também realizamos o <strong className="text-emerald-900 font-extrabold">download da imagem do card</strong> automaticamente para o seu dispositivo como backup.</p>
+                      </div>
+                      <div className="flex gap-2 items-start">
+                        <span className="bg-orange-500 text-white rounded-full w-5 h-5 flex items-center justify-center font-extrabold text-[10px] shrink-0 mt-0.5">3</span>
+                        <p className="font-semibold text-slate-800">
+                          Na janela do WhatsApp que irá abrir, basta clicar no campo de mensagem e usar o comando <strong className="text-orange-600 font-black">CTRL+V</strong> (computador) ou <strong className="text-orange-600 font-black">manter pressionado e tocar em Colar</strong> (celular) para colar a imagem e enviar!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2.5 pt-2">
+                    <button
+                      onClick={() => setShowWaCopyAlert(false)}
+                      className="flex-1 py-3 border border-slate-250 hover:bg-slate-50 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                    >
+                      Fechar
+                    </button>
+                    <a
+                      href={waLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setShowWaCopyAlert(false)}
+                      className="flex-2 py-3 bg-[#25D366] hover:bg-[#20ba5a] text-white font-black text-xs rounded-xl text-center no-underline cursor-pointer transition-all shadow-md active:scale-98 flex items-center justify-center gap-1.5"
+                    >
+                      <ExternalLink className="w-4 h-4 text-white" />
+                      <span>Ir para o WhatsApp</span>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         );
       })()}
 
