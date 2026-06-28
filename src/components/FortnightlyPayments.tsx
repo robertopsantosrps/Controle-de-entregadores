@@ -426,14 +426,18 @@ export default function FortnightlyPayments({
     // Check if we need to initialize records for this fortnight
     let modified = false;
 
-    // Purge records from January to May (month indexes 0 to 4 in 0-indexed system) as requested by user
-    Object.keys(loadedLedger).forEach((key) => {
-      const rec = loadedLedger[key];
-      if (rec && typeof rec.month === 'number' && rec.month < 5) {
-        delete loadedLedger[key];
-        modified = true;
-      }
-    });
+    // Perform a one-time purge of the original pre-seeded/mock data for Jan-May
+    const hasPurgedMocks = localStorage.getItem('jadlog_ledger_mock_cleaned_v2');
+    if (!hasPurgedMocks) {
+      Object.keys(loadedLedger).forEach((key) => {
+        const rec = loadedLedger[key];
+        if (rec && typeof rec.month === 'number' && rec.month < 5) {
+          delete loadedLedger[key];
+          modified = true;
+        }
+      });
+      localStorage.setItem('jadlog_ledger_mock_cleaned_v2', 'true');
+    }
 
     allCouriers.forEach((drv) => {
       const key = getRecordKey(drv.id);

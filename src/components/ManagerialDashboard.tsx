@@ -193,14 +193,19 @@ export default function ManagerialDashboard({
       const loaded: Record<string, FortnightlyLedgerRecord> = JSON.parse(saved);
       let modified = false;
 
-      // Purge records from January to May (months 0 to 4)
-      Object.keys(loaded).forEach((key) => {
-        const rec = loaded[key];
-        if (rec && typeof rec.month === 'number' && rec.month < 5) {
-          delete loaded[key];
-          modified = true;
-        }
-      });
+      // Only perform the purge of pre-seeded/mock data once as a migration
+      const hasPurgedMocks = localStorage.getItem('jadlog_ledger_mock_cleaned_v2');
+      if (!hasPurgedMocks) {
+        // Purge records from January to May (months 0 to 4)
+        Object.keys(loaded).forEach((key) => {
+          const rec = loaded[key];
+          if (rec && typeof rec.month === 'number' && rec.month < 5) {
+            delete loaded[key];
+            modified = true;
+          }
+        });
+        localStorage.setItem('jadlog_ledger_mock_cleaned_v2', 'true');
+      }
 
       if (modified) {
         localStorage.setItem('jadlog_fortnightly_ledger', JSON.stringify(loaded));
