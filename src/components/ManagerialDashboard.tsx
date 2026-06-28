@@ -714,7 +714,32 @@ export default function ManagerialDashboard({
         {/* Custom landscape print CSS rule injected directly. Guaranteed encapsulation! */}
         <style dangerouslySetInnerHTML={{ __html: `
           @media print {
-            /* Hide every element on the website */
+            /* Zero margins on the @page and body to prevent automatic shifting */
+            @page {
+              size: landscape;
+              margin: 0 !important;
+            }
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
+              background-color: #ffffff !important;
+              width: 297mm !important;
+              height: 210mm !important;
+              overflow: hidden !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            #root, .min-h-screen, .max-w-7xl, main {
+              margin: 0 !important;
+              padding: 0 !important;
+              background: transparent !important;
+              box-shadow: none !important;
+              min-height: 0 !important;
+              height: auto !important;
+              width: auto !important;
+            }
+
+            /* Hide every element on the website by default */
             body * {
               visibility: hidden !important;
             }
@@ -727,11 +752,11 @@ export default function ManagerialDashboard({
             #a4-presentation-container, .print-page {
               position: relative !important;
               width: 297mm !important;
-              height: 200mm !important;
-              max-width: 100% !important;
-              max-height: 100% !important;
+              height: 209mm !important; /* Slightly less than 210mm to guarantee single-page fitting without overflows */
+              max-width: 297mm !important;
+              max-height: 209mm !important;
               margin: 0 !important;
-              padding: 12mm 15mm !important;
+              padding: 10mm 15mm !important;
               border: none !important;
               box-shadow: none !important;
               background: #ffffff !important;
@@ -741,6 +766,7 @@ export default function ManagerialDashboard({
               display: flex !important;
               flex-direction: column !important;
               justify-content: space-between !important;
+              overflow: hidden !important;
             }
             .print-page:last-child {
               page-break-after: avoid !important;
@@ -752,18 +778,14 @@ export default function ManagerialDashboard({
               padding: 0 !important;
               margin: 0 !important;
             }
-            @page {
-              size: landscape;
-              margin: 4mm;
-            }
             /* Force side-by-side elements in print A4 or full page based on setup */
             .print-grid {
               display: grid !important;
               grid-template-columns: ${printLayout === 'both' ? 'repeat(2, minmax(0, 1fr))' : '1fr'} !important;
-              gap: 2rem !important;
+              gap: 1.5rem !important;
             }
             .print-chart {
-              height: 380px !important;
+              height: 275px !important; /* Scaled down perfectly so chart, KPI bar, signatures and headers comfortably fit in A4 */
             }
             .print-text-dark {
               color: #000000 !important;
