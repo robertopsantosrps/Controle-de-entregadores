@@ -186,80 +186,28 @@ export default function ManagerialDashboard({
     return [...standard, ...custom].filter(c => !deletedCouriers.includes(c.id));
   }, [drivers, customCouriers, driverMappings, deletedCouriers]);
 
-  // Seed historical data if missing to make past comparative charts instantly beautiful and functional
+  // Clean up any stale/fake records from January to May (indices 0 to 4) on mount, matching user intent to keep them zeroed.
   useEffect(() => {
     const saved = localStorage.getItem('jadlog_fortnightly_ledger');
-    let loaded: Record<string, FortnightlyLedgerRecord> = saved ? JSON.parse(saved) : {};
-    
-    // Seed all months Jan-Jun YTD (months 0 to 5) of 2026
-    let modified = false;
-    const monthsToSeed = [0, 1, 2, 3, 4, 5]; 
-    const fortnightsToSeed: Array<1 | 2> = [1, 2];
+    if (saved) {
+      const loaded: Record<string, FortnightlyLedgerRecord> = JSON.parse(saved);
+      let modified = false;
 
-    const driverIds = allCouriers.map(d => d.id);
-
-    monthsToSeed.forEach((mIndex) => {
-      fortnightsToSeed.forEach((fortNum) => {
-        driverIds.forEach((drvId) => {
-          const key = `2026-${mIndex}-${fortNum}-${drvId}`;
-          if (!loaded[key]) {
-            const mapInfo = driverMappings[drvId] || DRIVER_ROUTE_MAPPING[drvId] || { routeAlias: 'FABIO', defaultName: 'Carlos Silva' };
-            const pricing = TARIFS_FALLBACK[mapInfo.routeAlias] || { standard: 2.5, nonStandard: 4.0 };
-            const isFiorino = mapInfo.routeAlias === 'COPAV - FIORINO';
-
-            // Base quantities with organic wave oscillation per month
-            const baseRates = HISTORICAL_WEIGHTS[mapInfo.routeAlias] || { standard: 40, nonStandard: 2, occurrences: 1, pending: 0 };
-            const seasonalFactor = 0.85 + 0.2 * Math.sin(mIndex * 1.5 + fortNum);
-            
-            // Generate some random occurrences or debits occasionally
-            const standardCount = Math.max(0, Math.round(baseRates.standard * seasonalFactor));
-            const nonStandardCount = isFiorino 
-              ? Math.max(0, Math.round(3500 * seasonalFactor)) // Real copav volume
-              : Math.max(0, Math.round(baseRates.nonStandard * (0.9 + 0.3 * Math.cos(mIndex))));
-              
-            const occurrencesCount = Math.max(0, Math.round(baseRates.occurrences * (0.8 + 0.4 * Math.sin(mIndex))));
-            const pendingCount = Math.max(0, Math.round(mIndex % 3 === 0 ? 1 : 0));
-
-            // Calculate exact payout amount following standard system formula
-            const basePayout = isFiorino
-              ? (standardCount * pricing.standard) + nonStandardCount
-              : (standardCount * pricing.standard) + (nonStandardCount * (pricing.nonStandard - pricing.standard));
-
-            // Deduct simulated debits occasionally
-            const debitAdvance = mIndex % 2 === 0 ? parseFloat((50 + (mIndex * 10)).toFixed(2)) : 0;
-            const debitFuel = mIndex % 3 === 0 ? parseFloat((30 + (fortNum * 15)).toFixed(2)) : 0;
-            const debitLoss = mIndex === 4 && drvId === 'drv-1' ? 75 : 0;
-            const totalDebits = debitAdvance + debitFuel + debitLoss;
-
-            const payoutAmount = Math.max(0, parseFloat((basePayout - totalDebits).toFixed(2)));
-
-            loaded[key] = {
-              id: key,
-              year: 2026,
-              month: mIndex,
-              fortnight: fortNum,
-              driverId: drvId,
-              standardCount,
-              nonStandardCount,
-              occurrencesCount,
-              pendingCount,
-              isPaid: mIndex < 5, // past months are paid
-              payoutAmount,
-              debitAdvance,
-              debitFuel,
-              debitLoss
-            };
-            modified = true;
-          }
-        });
+      // Purge records from January to May (months 0 to 4)
+      Object.keys(loaded).forEach((key) => {
+        const rec = loaded[key];
+        if (rec && typeof rec.month === 'number' && rec.month < 5) {
+          delete loaded[key];
+          modified = true;
+        }
       });
-    });
 
-    if (modified) {
-      localStorage.setItem('jadlog_fortnightly_ledger', JSON.stringify(loaded));
+      if (modified) {
+        localStorage.setItem('jadlog_fortnightly_ledger', JSON.stringify(loaded));
+        setLedger(loaded);
+      }
     }
-    setLedger(loaded);
-  }, [allCouriers, driverMappings]);
+  }, []);
 
   // Handle syncing on focus/storage event to stay updated
   useEffect(() => {
@@ -374,8 +322,7 @@ export default function ManagerialDashboard({
           const key = `${selectedYear}-${mIndex}-${selectedFortnight}-${drv.id}`;
           const rec = ledger[key];
           if (rec) {
-            const isFiorino = (driverMappings[rec.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
-            deliveriesCount += rec.standardCount + (isFiorino ? 0 : rec.nonStandardCount);
+            deliveriesCount += rec.standardCount;
             payoutSum += rec.payoutAmount;
           }
         } else {
@@ -386,13 +333,11 @@ export default function ManagerialDashboard({
           const rec2 = ledger[key2];
 
           if (rec1) {
-            const isFiorino = (driverMappings[rec1.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
-            deliveriesCount += rec1.standardCount + (isFiorino ? 0 : rec1.nonStandardCount);
+            deliveriesCount += rec1.standardCount;
             payoutSum += rec1.payoutAmount;
           }
           if (rec2) {
-            const isFiorino = (driverMappings[rec2.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
-            deliveriesCount += rec2.standardCount + (isFiorino ? 0 : rec2.nonStandardCount);
+            deliveriesCount += rec2.standardCount;
             payoutSum += rec2.payoutAmount;
           }
         }
@@ -417,7 +362,7 @@ export default function ManagerialDashboard({
       
       const route = driverMappings[rec.driverId]?.routeAlias || 'EXTRA';
       const debits = (rec.debitAdvance || 0) + (rec.debitFuel || 0) + (rec.debitLoss || 0);
-      const totalDeliveries = rec.standardCount + (isCopav(route) ? 0 : rec.nonStandardCount);
+      const totalDeliveries = rec.standardCount;
 
       let efficiency = 100;
       
@@ -515,8 +460,7 @@ export default function ManagerialDashboard({
           const key = `${selectedYear}-${mIndex}-${selectedFortnight}-${drv.id}`;
           const rec = ledger[key];
           if (rec) {
-            const isFiorino = (driverMappings[rec.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
-            deliveriesCount += rec.standardCount + (isFiorino ? 0 : rec.nonStandardCount);
+            deliveriesCount += rec.standardCount;
           }
         } else {
           // Full Month comparisons: sum of first and second fortnights for all couriers
@@ -526,12 +470,10 @@ export default function ManagerialDashboard({
           const rec2 = ledger[key2];
 
           if (rec1) {
-            const isFiorino = (driverMappings[rec1.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
-            deliveriesCount += rec1.standardCount + (isFiorino ? 0 : rec1.nonStandardCount);
+            deliveriesCount += rec1.standardCount;
           }
           if (rec2) {
-            const isFiorino = (driverMappings[rec2.driverId]?.routeAlias || '') === 'COPAV - FIORINO';
-            deliveriesCount += rec2.standardCount + (isFiorino ? 0 : rec2.nonStandardCount);
+            deliveriesCount += rec2.standardCount;
           }
         }
       });

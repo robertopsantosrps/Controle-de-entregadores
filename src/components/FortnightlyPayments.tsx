@@ -1160,6 +1160,14 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
 
           <div className="flex flex-wrap items-center gap-2">
             <button
+              onClick={handleClearQuantities}
+              className="px-3 py-1.5 border border-red-200 hover:bg-red-50 text-red-600 rounded-xl font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
+              title="Zerar todas as quantidades manuais deste período para recomeçar do zero"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Zerar Período
+            </button>
+            <button
               onClick={() => setIsCreateModalOpen(true)}
               className="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-[11px] transition-colors flex items-center gap-1 cursor-pointer shadow-xs"
               title="Cadastrar um novo entregador ou rota de forma avulsa"
