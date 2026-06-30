@@ -253,6 +253,7 @@ export default function FortnightlyPayments({
 
   // Custom new registered cards/couriers
   const [localFora, setLocalFora] = useState<Record<string, string>>({});
+  const [localExtra, setLocalExtra] = useState<Record<string, string>>({});
   const [shareModalReport, setShareModalReport] = useState<any | null>(null);
   const [copiedText, setCopiedText] = useState(false);
   const [customCouriers, setCustomCouriers] = useState<Array<{ id: string; name: string; phone?: string; pix?: string; vehicle?: string }>>(() => {
@@ -479,7 +480,7 @@ export default function FortnightlyPayments({
           : (record.standardCount * pricing.standardRate) + 
             (record.nonStandardCount * (pricing.nonStandardRate - pricing.standardRate));
         const debits = (record.debitAdvance || 0) + (record.debitFuel || 0) + (record.debitLoss || 0);
-        const computedPayout = basePayout - debits;
+        const computedPayout = basePayout + (record.extra || 0) - debits;
 
         if (Math.abs(loadedLedger[key].payoutAmount - computedPayout) > 0.01) {
           loadedLedger[key].payoutAmount = computedPayout;
@@ -517,7 +518,7 @@ export default function FortnightlyPayments({
       : (updatedRecord.standardCount * pricing.standardRate) + 
         (updatedRecord.nonStandardCount * (pricing.nonStandardRate - pricing.standardRate));
     const debits = (updatedRecord.debitAdvance || 0) + (updatedRecord.debitFuel || 0) + (updatedRecord.debitLoss || 0);
-    updatedRecord.payoutAmount = basePayout - debits;
+    updatedRecord.payoutAmount = basePayout + (updatedRecord.extra || 0) - debits;
 
     const newLedger = {
       ...ledgerRecords,
@@ -573,6 +574,7 @@ export default function FortnightlyPayments({
           nonStandardCount: 0,
           occurrencesCount: 0,
           pendingCount: 0,
+          extra: 0,
           payoutAmount: 0,
           isPaid: false,
           paymentDate: undefined,
@@ -580,6 +582,7 @@ export default function FortnightlyPayments({
       }
     });
 
+    setLocalExtra({});
     setLedgerRecords(newLedger);
     localStorage.setItem('jadlog_fortnightly_ledger', JSON.stringify(newLedger));
   };
@@ -637,7 +640,7 @@ export default function FortnightlyPayments({
           : (record.standardCount * editFormRate) + 
             (record.nonStandardCount * (computedNonStandardRate - editFormRate)); 
         const debits = (record.debitAdvance || 0) + (record.debitFuel || 0) + (record.debitLoss || 0);
-        record.payoutAmount = basePayout - debits;
+        record.payoutAmount = basePayout + (record.extra || 0) - debits;
       }
     });
     setLedgerRecords(newLedger);
@@ -804,7 +807,7 @@ export default function FortnightlyPayments({
           : (record.standardCount * pricing.standardRate) + 
             (record.nonStandardCount * (pricing.nonStandardRate - pricing.standardRate));
         const debits = (record.debitAdvance || 0) + (record.debitFuel || 0) + (record.debitLoss || 0);
-        record.payoutAmount = basePayout - debits;
+        record.payoutAmount = basePayout + (record.extra || 0) - debits;
       }
     });
     setLedgerRecords(newLedger);
@@ -859,6 +862,10 @@ export default function FortnightlyPayments({
       } else {
         calcDetails += `\n➕ *Fora do Padrão:* R$ 0.00`;
       }
+    }
+
+    if (report.extra > 0) {
+      calcDetails += `\n➕ *Valor Extra:* R$ ${report.extra.toFixed(2)}`;
     }
 
     let occDetails = "⚠️ *Ocorrências/Pendências:* ";
@@ -940,6 +947,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
         debitAdvance: 0,
         debitFuel: 0,
         debitLoss: 0,
+        extra: 0,
       };
 
       const totalConcluidas = record.standardCount;
@@ -963,6 +971,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
         debitAdvance: record.debitAdvance || 0,
         debitFuel: record.debitFuel || 0,
         debitLoss: record.debitLoss || 0,
+        extra: record.extra || 0,
         isPaid: record.isPaid,
         paymentDate: record.paymentDate,
         isCustom: drv.isCustom
@@ -1289,50 +1298,84 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                     </div>
                   </div>
 
-                  {/* Sub-inputs for standard and out-of-pattern */}
-                  <div className="flex gap-2.5 bg-slate-50 border border-slate-200 p-2.5 rounded-2xl text-[11px] w-full sm:w-auto">
-                    <div className="flex items-center gap-1.5 text-slate-600 font-bold justify-between sm:justify-start w-full sm:w-auto">
-                      <span>Padrão:</span>
-                      <input
-                        type="number"
-                        value={report.standardCount}
-                        onChange={(e) => updateSingleRecord(report.driverId, { 
-                          standardCount: Math.max(0, parseInt(e.target.value) || 0) 
-                        })}
-                        className="w-12 text-center text-xs font-black font-mono bg-white border border-slate-250 rounded-lg py-1 px-0.5 cursor-pointer focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-slate-800"
-                      />
+                  {/* Sub-inputs for standard, out-of-pattern, and extra */}
+                  <div className="flex flex-col gap-2 w-full sm:w-auto">
+                    <div className="flex gap-2.5 bg-slate-50 border border-slate-200 p-2.5 rounded-2xl text-[11px] w-full sm:w-auto">
+                      <div className="flex items-center gap-1.5 text-slate-600 font-bold justify-between sm:justify-start w-full sm:w-auto">
+                        <span>Padrão:</span>
+                        <input
+                          type="number"
+                          value={report.standardCount}
+                          onChange={(e) => updateSingleRecord(report.driverId, { 
+                            standardCount: Math.max(0, parseInt(e.target.value) || 0) 
+                          })}
+                          className="w-12 text-center text-xs font-black font-mono bg-white border border-slate-250 rounded-lg py-1 px-0.5 cursor-pointer focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-slate-800"
+                        />
+                      </div>
+                      <div className="w-px bg-slate-200 self-stretch hidden sm:block"></div>
+                      <div className="flex items-center gap-1.5 text-amber-800 font-bold justify-between sm:justify-start w-full sm:w-auto">
+                        <span title={isCopav(report.routeAlias) ? "Valor adicional em R$ somado ao total" : "Adicionais fora do padrão (ganham acréscimo)"}>
+                          {isCopav(report.routeAlias) ? "Valor COPAV:" : "Fora Padrão: ⭐"}
+                        </span>
+                        <input
+                          type={isCopav(report.routeAlias) ? "text" : "number"}
+                          inputMode={isCopav(report.routeAlias) ? "decimal" : "numeric"}
+                          placeholder={isCopav(report.routeAlias) ? "0,00" : "0"}
+                          value={
+                            localFora[report.driverId] !== undefined
+                              ? localFora[report.driverId]
+                              : (report.nonStandardCount === 0 ? "" : String(report.nonStandardCount))
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value.replace(',', '.'); // Allow both comma and dot decimals for Brazilian users
+                            setLocalFora(prev => ({ ...prev, [report.driverId]: val }));
+
+                            const parsed = isCopav(report.routeAlias) ? (parseFloat(val) || 0) : (parseInt(val) || 0);
+                            updateSingleRecord(report.driverId, { 
+                              nonStandardCount: Math.max(0, parsed) 
+                            });
+                          }}
+                          onBlur={() => {
+                            setLocalFora(prev => {
+                              const copy = { ...prev };
+                              delete copy[report.driverId];
+                              return copy;
+                            });
+                          }}
+                          className={`${isCopav(report.routeAlias) ? 'w-16 text-center' : 'w-12 text-center'} text-xs font-black font-mono bg-white border border-slate-250 rounded-lg py-1 px-0.5 cursor-pointer focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-amber-700`}
+                        />
+                      </div>
                     </div>
-                    <div className="w-px bg-slate-200 self-stretch hidden sm:block"></div>
-                    <div className="flex items-center gap-1.5 text-amber-800 font-bold justify-between sm:justify-start w-full sm:w-auto">
-                      <span title={isCopav(report.routeAlias) ? "Valor adicional em R$ somado ao total" : "Adicionais fora do padrão (ganham acréscimo)"}>
-                        {isCopav(report.routeAlias) ? "Valor COPAV:" : "Fora Padrão: ⭐"}
+
+                    {/* Manual Extra Input */}
+                    <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 p-2 px-3 rounded-2xl text-[11px] w-full text-emerald-800 font-bold justify-between sm:justify-start">
+                      <span className="flex items-center gap-1" title="Valor adicional em R$ somado diretamente ao repasse líquido">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block animate-pulse"></span>
+                        Extra (R$):
                       </span>
                       <input
-                        type={isCopav(report.routeAlias) ? "text" : "number"}
-                        inputMode={isCopav(report.routeAlias) ? "decimal" : "numeric"}
-                        placeholder={isCopav(report.routeAlias) ? "0,00" : "0"}
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0,00"
                         value={
-                          localFora[report.driverId] !== undefined
-                            ? localFora[report.driverId]
-                            : (report.nonStandardCount === 0 ? "" : String(report.nonStandardCount))
+                          localExtra[report.driverId] !== undefined
+                            ? localExtra[report.driverId]
+                            : (report.extra === 0 ? "" : String(report.extra))
                         }
                         onChange={(e) => {
-                          const val = e.target.value.replace(',', '.'); // Allow both comma and dot decimals for Brazilian users
-                          setLocalFora(prev => ({ ...prev, [report.driverId]: val }));
-
-                          const parsed = isCopav(report.routeAlias) ? (parseFloat(val) || 0) : (parseInt(val) || 0);
-                          updateSingleRecord(report.driverId, { 
-                            nonStandardCount: Math.max(0, parsed) 
-                          });
+                          const val = e.target.value.replace(',', '.');
+                          setLocalExtra(prev => ({ ...prev, [report.driverId]: val }));
+                          const parsed = parseFloat(val) || 0;
+                          updateSingleRecord(report.driverId, { extra: Math.max(0, parsed) });
                         }}
                         onBlur={() => {
-                          setLocalFora(prev => {
+                          setLocalExtra(prev => {
                             const copy = { ...prev };
                             delete copy[report.driverId];
                             return copy;
                           });
                         }}
-                        className={`${isCopav(report.routeAlias) ? 'w-16 text-center' : 'w-12 text-center'} text-xs font-black font-mono bg-white border border-slate-250 rounded-lg py-1 px-0.5 cursor-pointer focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-amber-700`}
+                        className="w-16 text-center text-xs font-black font-mono bg-white border border-emerald-250 rounded-lg py-1 px-0.5 cursor-pointer focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none text-emerald-750"
                       />
                     </div>
                   </div>
@@ -1629,6 +1672,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                     <th className="py-2.5 px-3">Cidade / Rota Principal</th>
                     <th className="py-2.5 px-3 text-center">Total de Entregas</th>
                     <th className="py-2.5 px-3 text-center">Fora do Padrão (Adicional)</th>
+                    <th className="py-2.5 px-3 text-center text-emerald-700">Extra (R$)</th>
                     <th className="py-2.5 px-3 text-center">Ocorrências</th>
                     <th className="py-2.5 px-3 text-center">Pendentes</th>
                     <th className="py-2.5 px-3 text-center">Débitos Descontados (R$)</th>
@@ -1687,6 +1731,37 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                             });
                           }}
                           className={`${isCopav(report.routeAlias) ? 'w-20' : 'w-12'} text-center font-mono font-bold text-amber-700 bg-slate-55 border border-slate-200 rounded px-1 py-0.5 print:hidden hover:bg-white`}
+                        />
+                      </td>
+
+                      {/* Extra cell */}
+                      <td className="py-2.5 px-3 text-center print:font-mono font-bold text-emerald-700">
+                        <span className="hidden print:inline">
+                          {report.extra ? `R$ ${report.extra.toFixed(2)}` : 'R$ 0,00'}
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0,00"
+                          value={
+                            localExtra[report.driverId] !== undefined
+                              ? localExtra[report.driverId]
+                              : (report.extra === 0 ? "" : String(report.extra))
+                          }
+                          onChange={(e) => {
+                            const val = e.target.value.replace(',', '.');
+                            setLocalExtra(prev => ({ ...prev, [report.driverId]: val }));
+                            const parsed = parseFloat(val) || 0;
+                            updateSingleRecord(report.driverId, { extra: Math.max(0, parsed) });
+                          }}
+                          onBlur={() => {
+                            setLocalExtra(prev => {
+                              const copy = { ...prev };
+                              delete copy[report.driverId];
+                              return copy;
+                            });
+                          }}
+                          className="w-16 text-center font-mono font-bold text-emerald-750 bg-white border border-slate-200 rounded px-1 py-0.5 print:hidden hover:bg-emerald-50/40"
                         />
                       </td>
 
@@ -2422,7 +2497,7 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                         <span>💳 Beneficiário: <strong className="text-slate-800">{shareModalReport.driverName}</strong></span>
                         <span>📍 Rota: <strong className="text-slate-800">{shareModalReport.routeAlias}</strong></span>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 pt-1">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1">
                         <div className="bg-white p-2.5 rounded-xl border border-slate-200/60">
                           <p className="text-[8px] uppercase tracking-wider font-semibold text-slate-400">Total Concluídos</p>
                           <p className="text-sm font-bold text-slate-800 mt-0.5">{shareModalReport.standardCount} entregas</p>
@@ -2436,6 +2511,12 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                           <div className="bg-white p-2.5 rounded-xl border border-slate-200/60">
                             <p className="text-[8px] uppercase tracking-wider font-semibold text-slate-400">Fora do Padrão</p>
                             <p className="text-sm font-bold text-slate-800 mt-0.5">{shareModalReport.nonStandardCount} entregas</p>
+                          </div>
+                        )}
+                        {shareModalReport.extra > 0 && (
+                          <div className="bg-emerald-50 border border-emerald-200/60 p-2.5 rounded-xl col-span-2 sm:col-span-1">
+                            <p className="text-[8px] uppercase tracking-wider font-extrabold text-emerald-600">Valor Extra</p>
+                            <p className="text-sm font-black text-emerald-800 mt-0.5">R$ {shareModalReport.extra.toFixed(2)}</p>
                           </div>
                         )}
                       </div>
@@ -2673,18 +2754,28 @@ Por favor, confira os valores acima. Caso tenha alguma divergência nos dê um r
                   </div>
                 </div>
                 
-                <div className="flex gap-3 bg-slate-50 border border-slate-200 p-2.5 rounded-2xl text-[11px]">
-                  <div className="flex items-center gap-1.5 text-slate-600 font-bold">
-                    <span>Padrão:</span>
-                    <span className="font-mono text-xs font-black text-slate-800 bg-white border border-slate-200 px-1.5 py-0.5 rounded-lg">{shareModalReport.standardCount}</span>
+                <div className="flex flex-col items-end gap-1.5">
+                  <div className="flex gap-3 bg-slate-50 border border-slate-200 p-2.5 rounded-2xl text-[11px]">
+                    <div className="flex items-center gap-1.5 text-slate-600 font-bold">
+                      <span>Padrão:</span>
+                      <span className="font-mono text-xs font-black text-slate-800 bg-white border border-slate-200 px-1.5 py-0.5 rounded-lg">{shareModalReport.standardCount}</span>
+                    </div>
+                    <div className="w-px bg-slate-200 self-stretch"></div>
+                    <div className="flex items-center gap-1.5 text-amber-805 font-bold">
+                      <span>{isCopav(shareModalReport.routeAlias) ? "Valor COPAV:" : "Fora Padrão: ⭐"}</span>
+                      <span className="font-mono text-xs font-black text-amber-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded-lg">
+                        {isCopav(shareModalReport.routeAlias) ? `R$ ${shareModalReport.nonStandardCount.toFixed(2)}` : shareModalReport.nonStandardCount}
+                      </span>
+                    </div>
                   </div>
-                  <div className="w-px bg-slate-200 self-stretch"></div>
-                  <div className="flex items-center gap-1.5 text-amber-805 font-bold">
-                    <span>{isCopav(shareModalReport.routeAlias) ? "Valor COPAV:" : "Fora Padrão: ⭐"}</span>
-                    <span className="font-mono text-xs font-black text-amber-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded-lg">
-                      {isCopav(shareModalReport.routeAlias) ? `R$ ${shareModalReport.nonStandardCount.toFixed(2)}` : shareModalReport.nonStandardCount}
-                    </span>
-                  </div>
+                  {shareModalReport.extra > 0 && (
+                    <div className="flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 p-1.5 px-2.5 rounded-2xl text-[10px] font-bold text-emerald-800">
+                      <span>Extra:</span>
+                      <span className="font-mono text-[11px] font-black text-emerald-700 bg-white border border-emerald-200 px-1.5 py-0.5 rounded-lg">
+                        R$ {shareModalReport.extra.toFixed(2)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 

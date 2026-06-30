@@ -54,6 +54,7 @@ export interface FortnightlyLedgerRecord {
   debitAdvance?: number;      // Adiantamento
   debitFuel?: number;         // Combustível
   debitLoss?: number;         // Multa/Extravio
+  extra?: number;             // Valor Extra manual
 }
 
 
